@@ -6,7 +6,7 @@ const p = @import("rzl/parser.zig");
 // In src/repl.zig
 pub const repl = struct {
     code: [1024]u8,
-    code_len: u16,
+    code_len: usize,
     stdout_buf: [2048]u8,
     stdin_buf: [2048]u8,
     stdout: *std.Io.Writer,
@@ -48,19 +48,19 @@ pub const repl = struct {
         const line = std.mem.trim(u8, bare_line, "\r");
         // try self.stdout.print("Got {any}\n", .{line});
         // try self.stdout.flush();
-        // self.code = line;
+        self.code_len = line.len;
         @memcpy(self.code[0..line.len], line);
     }
     pub fn eval(self: *repl) void {
         var lexer = l.Lexer.init();
         const token_list = lexer.run(self.code[0..self.code_len]) catch unreachable;
         for (token_list.items) |token| {
-            std.debug.print("Token: {s}, Content: {s}\n", .{ @tagName(token.token_type), token.contents });
+            std.debug.print("token: {}, content: {s}\n", .{ token.token_type, token.contents });
         }
-        var parser = p.Parser.init(token_list);
-        _ = parser.run();
-        // run expander
-        // run compiler
-        // run vm
+        var parser = p.Parser.init();
+        const ast = parser.run(token_list) catch unreachable;
+        _ = ast;
+        // const bytecode = compiler.run(ast);
+        // const ret = vm.run(bytecode);
     }
 };

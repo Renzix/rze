@@ -3,6 +3,8 @@ pub const TokenType = enum {
     R_PAREN,
     SYMBOL,
     STRING,
+    INTEGER,
+    DOUBLE,
 };
 
 pub const Token = struct {
