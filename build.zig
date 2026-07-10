@@ -33,6 +33,19 @@ pub fn build(b: *std.Build) void {
 
     run_cmd.step.dependOn(b.getInstallStep());
 
+    const vm_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/rzvm/vm.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+
+    const run_vm_tests = b.addRunArtifact(vm_tests);
+
+    const test_step = b.step("testvm", "Run VM unit tests");
+    test_step.dependOn(&run_vm_tests.step);
+
     if (b.args) |args| {
         run_cmd.addArgs(args);
     }

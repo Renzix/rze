@@ -62,17 +62,17 @@ pub const SExpr = union(SExprType) {
     nil: void,
     cons: Cons,
 };
+const reserved = [_][]const u8{
+    "if",   "then", "else", "elif",  "fi",    "do",
+    "done", "case", "esac", "while", "until", "for",
+    "{",    "}",    "!",    "in",
+};
+const operators = [_][]const u8{
+    "&&", "||", ";;", "<<",  ">>",
+    "<&", ">&", "<>", "<<-", ">|",
+};
 
 pub const Lexer = struct {
-    const reserved = [_][]const u8{
-        "if",   "then", "else", "elif",  "fi",    "do",
-        "done", "case", "esac", "while", "until", "for",
-        "{",    "}",    "!",    "in",
-    };
-    const operators = [_][]const u8{
-        "&&", "||", ";;", "<<",  ">>",
-        "<&", ">&", "<>", "<<-", ">|",
-    };
     const allocator = std.heap.c_allocator;
     pub fn init() Lexer {
         return Lexer{};
