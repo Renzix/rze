@@ -37,9 +37,12 @@ pub const RzValue = packed struct(u64) {
     reserved: u2,
     data: u48,
 
-    pub fn toBytes(self: RzValue) [8]u8 {
+    pub inline fn toBytes(self: RzValue) [8]u8 {
         // std.debug.print("rzvalue: {}\n", .{self.data});
         return std.mem.toBytes(@as(u64, @bitCast(self)));
+    }
+    pub inline fn toU64(self: RzValue) u64 {
+        return @bitCast(self);
     }
 
     pub fn init(type_info: TypeInfo, ptr: u1, mutable: u1, nullable: u1, err: u1, gc: GcBit, val: u48) RzValue {
