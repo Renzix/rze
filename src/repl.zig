@@ -2,6 +2,7 @@ const std = @import("std");
 
 const l = @import("rzl/lexer.zig");
 const p = @import("rzl/parser.zig");
+const c = @import("rzl/compiler.zig");
 
 // In src/repl.zig
 pub const repl = struct {
@@ -59,8 +60,11 @@ pub const repl = struct {
         }
         var parser = p.Parser.init();
         const ast = parser.run(token_list) catch unreachable;
-        _ = ast;
-        // const bytecode = compiler.run(ast);
+
+        var compiler = c.Compiler.init();
+        _ = compiler.run(ast) catch unreachable;
+
+        // var vm = v.Rzvm.init();
         // const ret = vm.run(bytecode);
     }
 };
