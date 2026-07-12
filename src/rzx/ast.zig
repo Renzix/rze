@@ -7,8 +7,8 @@ pub const Program = struct {
 pub const SimpleCommand = struct {
     assignments: std.ArrayList(AssignmentWords),
     cmd: ?[]const u8,
-    args: [][]const u8,
-    redirects: IoRedirection,
+    args: std.ArrayList([]const u8),
+    redirects: std.ArrayList(IoRedirection),
 };
 
 pub const AssignmentWords = struct {
@@ -16,7 +16,17 @@ pub const AssignmentWords = struct {
     value: []const u8,
 };
 
+pub const Redirect = enum {
+    INVALID,   // invalid
+    LESSTHAN,  // <
+    LESSAND,   // <&
+    GREATTHAN, // >
+    DGREAT,    // >>
+    LESSGREAT, // <>
+    CLOBBER,   // >|
+};
+
 pub const IoRedirection = struct {
-    // input redirect?
-    // output redirect?
+    typ: Redirect,
+    filename: []const u8,
 };

@@ -38,32 +38,91 @@ pub const Parser = struct {
         // std.debug.assert(self.content_len == str.len);
         // var foundToken = (self.code.len != 0);
 
-        _ = self.parseSimpleCommand();
+        _ = self.parseCompleteCommandList();
         // while (self.code.len > self.i) {
         //     foundToken = self.lexToken();
         // }
     }
-    fn parseSimpleCommand(self: *Parser) bool {
-        var found = false;
-        if(self.parseCmdPrefix()) {
-            found = true;
+
+    fn parseCompleteCommandList(self: *Parser) bool {
+        while (true) {
+            _ = self.parseAndOr();
+            if (self.lexChar('&')) {
+                continue;
+            }
+            if (self.lexChar(';')) {
+                continue;
+            }
+            break;
         }
-        if(self.parseCmdName()) {
-            found = true;
-        }
-        if(self.parseCmdSuffix()) {}
-        return found;
+        return true;
     }
 
-    fn parseCmdPrefix(self: *Parser) bool {
+    fn parseAndOr(self: *Parser) bool {
+        while (true) {
+            _ = self.parsePipeline();
+            _ = self.skipWhitespace();
+            if (self.lexString("&&")) {
+                _ = self.skipWhitespace();
+                continue;
+            }
+            break;
+        }
+        return true;
+    }
+
+    fn parsePipeline(self: *Parser) bool {
+        _ = self.skipWhitespace();
+        _ = self.lexChar('!'); // handle this
+        const ret = self.parsePipeSequence();
+        return ret;
+    }
+
+    fn parsePipeSequence(self: *Parser) bool {
+        while(true) {
+            _ = self.parseCommand();
+            _ = self.skipWhitespace();
+            if (self.lexChar('|')) {
+                // self.i+=1;
+                _ = self.skipWhitespace();
+                continue;
+            }
+            break;
+        }
+        return true;
+    }
+    fn parseCommand(self: *Parser) bool {
+        // function
+        // compound command and optional redirect
+        _ = self.parseSimpleCommand();
+        return false;
+    }
+    fn parseSimpleCommand(self: *Parser) ?ast.SimpleCommand {
+        var sc: ast.SimpleCommand = .{
+            .assignments = .empty,
+            .cmd = null,
+            .args = .empty,
+            .redirects = undefined,
+        };
+        var found = false;
+        if(self.parseCmdPrefix(&sc)) {
+            found = true;
+        }
+        if(self.parseCmdName(&sc)) {
+            found = true;
+        }
+        if(self.parseCmdSuffix(&sc)) {}
+        if (found) return null else return sc;
+    }
+
+    fn parseCmdPrefix(self: *Parser, sc: *ast.SimpleCommand) bool {
         var found = false;
         while(true) {
             _ = self.skipWhitespace();
             if (self.lexAssignment()) |assign| {
-                // const assign =
                 log("variable name: {s}\n",.{assign.name});
                 log("variable value: {s}\n",.{assign.value});
-                // cmd.assignments = _;
+                sc.assignments.append(allocator, assign) catch @panic("oom");
                 found=true; continue;
             }
             if (self.parseIoRedirect()) { found=true; continue; }
@@ -72,11 +131,20 @@ pub const Parser = struct {
         return found;
     }
 
-    fn parseCmdSuffix(self: *Parser) bool {
+    fn parseCmdName(self: *Parser, sc: *ast.SimpleCommand) bool {
+        const cmd_name = self.lexWord();
+        sc.cmd = cmd_name;
+        return cmd_name!=null;
+    }
+
+    fn parseCmdSuffix(self: *Parser, sc: *ast.SimpleCommand) bool {
         var found = false;
         while(true) {
             _ = self.skipWhitespace();
-            if (self.lexWord()) |_| { found=true; continue; }
+            if (self.lexWord()) |arg| {
+                sc.args.append(allocator, arg) catch @panic("oom");
+                found=true; continue;
+            }
             if (self.parseIoRedirect()) { found=true; continue; }
             break;
         }
@@ -92,9 +160,9 @@ pub const Parser = struct {
         return false;
     }
 
-    fn lexIoFile(self: *Parser) bool {
+    fn lexIoFile(self: *Parser) ?ast.IoRedirection {
         self.start = self.i;
-        if (self.i >= self.code.len) return false;
+        if (self.i >= self.code.len) return null;
         switch(self.code[self.i]) {
             '>' => {
                 if (self.i+1 < self.code.len) {
@@ -111,14 +179,15 @@ pub const Parser = struct {
                             // @TODO(Renzix): Implement
                             @panic("Clobber");
                         },
-                        else => { // '>' or invalid
-                            log("Found >: >\n", .{});
+                        else => { // GREATTHAN '>' or invalid
+                            log("Found GREATTHAN: >\n", .{});
                             self.i += 1;
                             _ = self.skipWhitespace();
                             // expected filename, io_rediect with no filename
-                            if(self.lexWord()==null)
+                            const file = self.lexWord();
+                            if(file==null)
                                 @panic("expected filename, io_redirect with no filename");
-                            return true;
+                            return .{ .typ = ast.Redirect.GREATTHAN, .filename = file.? };
                         }
                     }
                 } else {
@@ -137,27 +206,24 @@ pub const Parser = struct {
                         '>' => { // LESSGREAT <>
                             @panic("LESSGREAT");
                         },
-                        else => { // '<' or invalid
-                            log("Found <: <\n", .{});
+                        else => { // LESSTHAN '<' or invalid
+                            log("Found LESSTHAN: <\n", .{});
                             self.i += 1;
                             _ = self.skipWhitespace();
                             // expected filename, io_rediect with no filename
-                            if(self.lexWord()==null)
+                            const file = self.lexWord();
+                            if(file==null)
                                 @panic("expected filename, io_redirect with no filename");
-                            return true;
+                            return .{ .typ = ast.Redirect.LESSTHAN, .filename = file.? };
                         }
                     }
                 }
             },
             else => {
-                return false;
+                return null;
             },
         }
-        return false;
-    }
-
-    fn parseCmdName(self: *Parser) bool {
-        return self.lexWord()!=null;
+        return null;
     }
 
     fn lexWord(self: *Parser) ?[]const u8 {
@@ -211,6 +277,30 @@ pub const Parser = struct {
             .value = self.code[eql_index.?+1..self.i]
         };
     }
+
+    fn lexString(self: *Parser, comptime str: []const u8) bool {
+        self.start = self.i;
+        for (str) |char| {
+            if(self.i >= self.code.len or self.code[self.i]!=char) {
+                self.i=self.start;
+                return false;
+            }
+            self.i+=1;
+        }
+        log("Found String: {s}\n", .{str});
+        return true;
+    }
+
+    fn lexChar(self: *Parser, comptime char: u8) bool {
+        if(self.i < self.code.len and self.code[self.i]==char) {
+            log("Found Char: {c}\n", .{self.code[self.i]});
+            self.i+=1;
+            return true;
+        } else {
+            return false;
+        }
+    }
+
     fn contentClear(self: *Parser) void {
         @memset(&self.content, 0);
         self.content_len = 0;
