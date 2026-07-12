@@ -3,6 +3,7 @@ const std = @import("std");
 const l = @import("rzl/lexer.zig");
 const p = @import("rzl/parser.zig");
 const c = @import("rzl/compiler.zig");
+const rzx = @import("rzx/parser.zig");
 
 // In src/repl.zig
 pub const repl = struct {
@@ -53,16 +54,18 @@ pub const repl = struct {
         @memcpy(self.code[0..line.len], line);
     }
     pub fn eval(self: *repl) void {
-        var lexer = l.Lexer.init();
-        const token_list = lexer.run(self.code[0..self.code_len]) catch unreachable;
-        for (token_list.items) |token| {
-            std.debug.print("token: {}, content: {s}\n", .{ token.token_type, token.contents });
-        }
-        var parser = p.Parser.init();
-        const ast = parser.run(token_list) catch unreachable;
+        var rzxparser = rzx.Parser.init();
+        rzxparser.run(self.code[0..self.code_len]);
+        // var lexer = l.Lexer.init();
+        // const token_list = lexer.run(self.code[0..self.code_len]) catch unreachable;
+        // for (token_list.items) |token| {
+        //     std.debug.print("token: {}, content: {s}\n", .{ token.token_type, token.contents });
+        // }
+        // var parser = p.Parser.init();
+        // _ = parser.run(token_list) catch unreachable;
 
-        var compiler = c.Compiler.init();
-        _ = compiler.run(ast) catch unreachable;
+        // var compiler = c.Compiler.init();
+        // _ = compiler.run(ast) catch unreachable;
 
         // var vm = v.Rzvm.init();
         // const ret = vm.run(bytecode);
