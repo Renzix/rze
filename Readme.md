@@ -46,3 +46,22 @@ there also should be a group of functions for the "standard way of doing things"
 in each of the languages defined.
 
 
+## Contribution
+
+ I would not suggest contributing until I start to actually make feature
+branches because this repo is currently a mess of ideas. I may have broken the
+style a lot but the goal is to use zig's standard contribution style.
+https://ziglang.org/documentation/0.16.0/#Style-Guide . (when they exist) please
+run test code to determine if you broke anything and if there are no tests for
+your new feature then please make some basic ones.
+
+You are allowed to use AI however use of AI will be under more scrutiny then
+human code. The goal of contributing should be to learn how this project works.
+If you just want new features and dont care about vibecoding then please fork
+this project and every once in a while just pull from this repo. If you
+genuinely have no idea how this project works then asking AI is a great way to
+start. When I say this I moreso mean asking AI what particular functions do and
+how certain processes work. Once you do that you should relatively quickly
+double check the AI to ensure you actually understand. I made this project
+initially by git cloning dash and luajit and looking as much as I can at the
+sourcecode to see wtf they are doing to better understand things.

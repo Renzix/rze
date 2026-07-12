@@ -1,36 +1,11 @@
 const std = @import("std");
 const log = @import("std").debug.print;
 
-// @TODO(Renzix): Move these types to their own file
-pub const TokenType = enum {
-    NONE,
-    WORD,
-    ASSIGNMENT_WORD,
-    NAME,
-    NEWLINE,
-    IO_NUMBER,
-    IO_LOCATION,
-};
+const TokenType = @import("token.zig").TokenType;
+const Quoted = @import("token.zig").Quoted;
+const ast = @import("ast.zig");
 
-const Quoted = enum {
-    QUOTED_NONE,
-    QUOTED_DOUBLE,
-    QUOTED_SINGLE,
-};
-
-fn Charset(comptime chars: []const u8) [256]bool {
-    var table = [_]bool{false} ** 256;
-    for (chars) |c| table[c] = true;
-    return table;
-}
-
-const WordChars = Charset("abcdefghijklmnopqrstuvwxyz"
-    ++ "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    ++ "0123456789" ++ "_${}\"'.");
-
-const AssignmentChars = Charset("abcdefghijklmnopqrstuvwxyz"
-    ++ "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    ++ "0123456789" ++ "_${}\"'" ++ "=");
+const helper = @import("token.zig");
 
 // we parse and lex at the same time for shell!!!
 pub const Parser = struct {
@@ -41,8 +16,8 @@ pub const Parser = struct {
     content_len: usize,
     i: usize,
     start: usize,
-    first_token: bool,
-    // AST = std.ArrayList,
+    ast: ast.Program,
+
     const allocator = std.heap.c_allocator;
 
     pub fn init() Parser {
@@ -54,7 +29,7 @@ pub const Parser = struct {
             .start = 0,
             .content = undefined,
             .content_len = 0,
-            .first_token = false,
+            .ast = .{ .simple_command = undefined },
         };
     }
     pub fn run(self: *Parser, str: []const u8) void {
@@ -69,35 +44,28 @@ pub const Parser = struct {
         // }
     }
     fn parseSimpleCommand(self: *Parser) bool {
-        self.first_token = true;
+        var found = false;
         if(self.parseCmdPrefix()) {
-            self.first_token = false;
+            found = true;
         }
         if(self.parseCmdName()) {
-            self.first_token = false;
+            found = true;
         }
         if(self.parseCmdSuffix()) {}
-        return !self.first_token;
-        // switch (ch) {
-        //     '|', '>', '<'
-        //     'a'...'z', 'A'...'Z' => {
-        //         if(self.lexWord()) {
-        //             // if first then set to cmd_name
-        //             // else set to cmd suffex
-        //         }
-        //         if(self.lexAssignment()) return true;
-        //     },
-        //     else => {
-        //         log("Unknown char {c}\n", .{ch});
-        //     },
-        // }
+        return found;
     }
 
     fn parseCmdPrefix(self: *Parser) bool {
         var found = false;
         while(true) {
             _ = self.skipWhitespace();
-            if (self.lexAssignment()) { found=true; continue; }
+            if (self.lexAssignment()) |assign| {
+                // const assign =
+                log("variable name: {s}\n",.{assign.name});
+                log("variable value: {s}\n",.{assign.value});
+                // cmd.assignments = _;
+                found=true; continue;
+            }
             if (self.parseIoRedirect()) { found=true; continue; }
             break;
         }
@@ -108,7 +76,7 @@ pub const Parser = struct {
         var found = false;
         while(true) {
             _ = self.skipWhitespace();
-            if (self.lexWord()) { found=true; continue; }
+            if (self.lexWord()) |_| { found=true; continue; }
             if (self.parseIoRedirect()) { found=true; continue; }
             break;
         }
@@ -148,7 +116,7 @@ pub const Parser = struct {
                             self.i += 1;
                             _ = self.skipWhitespace();
                             // expected filename, io_rediect with no filename
-                            if(!self.lexWord())
+                            if(self.lexWord()==null)
                                 @panic("expected filename, io_redirect with no filename");
                             return true;
                         }
@@ -174,7 +142,7 @@ pub const Parser = struct {
                             self.i += 1;
                             _ = self.skipWhitespace();
                             // expected filename, io_rediect with no filename
-                            if(!self.lexWord())
+                            if(self.lexWord()==null)
                                 @panic("expected filename, io_redirect with no filename");
                             return true;
                         }
@@ -189,55 +157,59 @@ pub const Parser = struct {
     }
 
     fn parseCmdName(self: *Parser) bool {
-        return self.lexWord();
+        return self.lexWord()!=null;
     }
 
-    fn lexWord(self: *Parser) bool {
+    fn lexWord(self: *Parser) ?[]const u8 {
         self.start = self.i;
         var found=false;
-        while(self.i < self.code.len and WordChars[self.code[self.i]]) {
+        while(self.i < self.code.len and helper.WordChars[self.code[self.i]]) {
             self.i += 1;
             found=true;
         }
         if(!found) {
             self.i = self.start;
-            return false;
+            return null;
         }
         if (self.i < self.code.len and self.code[self.i]=='=') {
             self.i = self.start;
-            return false;
+            return null;
         }
 
-        const len = self.i - self.start;
-        @memcpy(self.content[0..len], self.code[self.start..self.i]);
-        self.content_len = len;
-        log("Found Word: {s}\n", .{self.content[0..len]});
-        self.token = TokenType.WORD;
-        return true;
+        // const len = self.i - self.start;
+        // @memcpy(self.content[0..len], self.code[self.start..self.i]);
+        // self.content_len = len;
+        log("Found Word: {s}\n", .{self.code[self.start..self.i]});
+        // self.token = TokenType.WORD;
+        return self.code[self.start..self.i];
     }
-    fn lexAssignment(self: *Parser) bool {
+    fn lexAssignment(self: *Parser) ?ast.AssignmentWords {
         self.start = self.i;
         var found=false;
         var eql_index: ?usize = null;
-        while(self.i < self.code.len and AssignmentChars[self.code[self.i]]) {
+        while(self.i < self.code.len and helper.AssignmentChars[self.code[self.i]]) {
             if (eql_index==null and self.code[self.i]=='=') eql_index=self.i;
             self.i += 1;
             found=true;
         }
         if(!found) {
             self.i = self.start;
-            return false; // no characters
+            return null; // no characters
         }
         if (eql_index==null) {
             self.i = self.start;
-            return false; // couldnt find = sign
+            return null; // couldnt find = sign
         }
-        const len = self.i - self.start;
-        @memcpy(self.content[0..len], self.code[self.start..self.i]);
-        self.content_len = len;
-        log("Found Assignment: {s}\n", .{self.content[0..len]});
-        self.token = TokenType.ASSIGNMENT_WORD;
-        return true;
+        // const len = self.i - self.start;
+        // @memcpy(self.content[0..len], self.code[self.start..self.i]);
+        // self.content_len = len;
+        log("Found Assignment Word: {s}\n", .{self.code[self.start..self.i]});
+        // self.token = TokenType.ASSIGNMENT_WORD;
+        // return self.code[self.start..self.i];
+        return .{
+            .name = self.code[self.start..eql_index.?],
+            .value = self.code[eql_index.?+1..self.i]
+        };
     }
     fn contentClear(self: *Parser) void {
         @memset(&self.content, 0);
