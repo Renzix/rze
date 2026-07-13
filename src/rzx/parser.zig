@@ -8,77 +8,86 @@ const ast = @import("ast.zig");
 const helper = @import("token.zig");
 
 // we parse and lex at the same time for shell!!!
+// Heavily based off of the grammar rules
+// HERE https://pubs.opengroup.org/onlinepubs/9799919799/
 pub const Parser = struct {
     code: []const u8,
-    quoted: Quoted,
-    token: TokenType,
-    content: [100]u8, // make bigger if you make a string that is longer the 100 lines this will crash!
-    content_len: usize,
     i: usize,
     start: usize,
-    ast: ast.Program,
 
     const allocator = std.heap.c_allocator;
 
     pub fn init() Parser {
         return Parser{
             .code = undefined,
-            .quoted = Quoted.QUOTED_NONE,
-            .token = TokenType.NONE,
             .i = 0,
             .start = 0,
-            .content = undefined,
-            .content_len = 0,
-            .ast = .{ .simple_command = undefined },
         };
     }
-    pub fn run(self: *Parser, str: []const u8) void {
+    pub fn run(self: *Parser, str: []const u8) ?ast.Program {
         self.code = str;
-        // log("str: {}, content: {}\n", .{str.len, self.content.len});
-        // std.debug.assert(self.content_len == str.len);
-        // var foundToken = (self.code.len != 0);
 
-        _ = self.parseCompleteCommandList();
-        // while (self.code.len > self.i) {
-        //     foundToken = self.lexToken();
-        // }
+        const program = self.parseCompleteCommandList();
+        return program;
     }
 
     // complete command and list
-    fn parseCompleteCommandList(self: *Parser) bool {
+    fn parseCompleteCommandList(self: *Parser) ?ast.Program {
+        var program: ast.Program = .{ .andors = .empty, .background = .empty };
         while (true) {
-            _ = self.parseAndOr();
+            if(self.parseAndOr()) |andor| {
+                program.andors.append(allocator, andor) catch @panic("oom");
+            } else {
+                break;
+            }
             if (self.lexChar('&')) {
+                program.background.append(allocator, true) catch @panic("oom");
                 continue;
+            } else {
+                program.background.append(allocator, false) catch @panic("oom");
             }
             if (self.lexChar(';')) {
                 continue;
             }
             break;
         }
-        return true;
+        std.debug.assert(program.andors.items.len == program.background.items.len);
+        if (program.andors.items.len > 0) return program else return null;
     }
 
-    fn parseAndOr(self: *Parser) bool {
+    fn parseAndOr(self: *Parser) ?ast.AndOr {
+        var andor: ast.AndOr = .{ .pipelines = .empty, .and_or_list = .empty };
         while (true) {
-            _ = self.parsePipeline();
+            if (self.parsePipeline()) |p| {
+                andor.pipelines.append(allocator, p) catch @panic("oom");
+            }
             _ = self.skipWhitespace();
             if (self.lexString("&&")) {
+                andor.and_or_list.append(allocator, ast.AndOrIf.and_if) catch @panic("oom");
+                _ = self.skipWhitespace();
+                _ = self.skipNewlines();
+                continue;
+            }
+            if (self.lexString("||")) {
+                andor.and_or_list.append(allocator, ast.AndOrIf.or_if) catch @panic("oom");
                 _ = self.skipWhitespace();
                 _ = self.skipNewlines();
                 continue;
             }
             break;
         }
-        return true;
+        if (andor.pipelines.items.len>0) return andor else return null;
     }
 
     // Pipeline and pipeline sequence
-    fn parsePipeline(self: *Parser) bool {
+    fn parsePipeline(self: *Parser) ?ast.Pipeline {
+        var pipeline: ast.Pipeline = .{ .bang = false, .cmds = .empty };
         _ = self.skipWhitespace();
-        _ = self.lexChar('!'); // handle this
+        if(self.lexChar('!')) pipeline.bang = true;
         while(true) {
-            _ = self.parseCommand();
+            if (self.parseCommand()) |cmd| {
+                pipeline.cmds.append(allocator, cmd) catch @panic("oom");
+            }
             _ = self.skipWhitespace();
             if (self.lexChar('|')) {
                 _ = self.skipWhitespace();
@@ -87,13 +96,20 @@ pub const Parser = struct {
             }
             break;
         }
-        return true;
+        // if we have no commands then we failed to parse...
+        if (pipeline.cmds.items.len>0 or pipeline.bang == true)
+            return pipeline
+        else
+            return null;
     }
-    fn parseCommand(self: *Parser) bool {
+
+    fn parseCommand(self: *Parser) ?ast.Command {
         // function command
         // compound command and optional redirect
-        _ = self.parseSimpleCommand();
-        return false;
+        if (self.parseSimpleCommand()) |sc| {
+            return .{ .simple_command = sc };
+        }
+        return null;
     }
     fn parseSimpleCommand(self: *Parser) ?ast.SimpleCommand {
         var sc: ast.SimpleCommand = .{
@@ -110,7 +126,7 @@ pub const Parser = struct {
             found = true;
         }
         if(self.parseCmdSuffix(&sc)) {}
-        if (found) return null else return sc;
+        if (found) return sc else return null;
     }
 
     fn parseCmdPrefix(self: *Parser, sc: *ast.SimpleCommand) bool {
@@ -225,13 +241,44 @@ pub const Parser = struct {
     }
 
     fn lexWord(self: *Parser) ?[]const u8 {
+        // var w = std.ArrayList(ast.Word);
         self.start = self.i;
-        var found=false;
-        while(self.i < self.code.len and helper.WordChars[self.code[self.i]]) {
-            self.i += 1;
-            found=true;
+        var quoted = Quoted.NONE;
+        // this can be much much better
+        // const found = if (self.i<self.code.len) helper.WordChars[self.code[self.i]] else false;
+        var found = false;
+        while(self.i < self.code.len) {
+            switch (quoted) {
+                Quoted.NONE => {
+                    if(helper.WordChars[self.code[self.i]]) {
+                        switch (self.code[self.i]) {
+                            '"' => quoted = Quoted.DOUBLE,
+                            '\'' => quoted = Quoted.SINGLE,
+                            else => {},
+                        }
+                        self.i += 1;
+                        found = true;
+                    } else break;
+                },
+                Quoted.DOUBLE => {
+                    switch (self.code[self.i]) {
+                        '"' => quoted = Quoted.NONE,
+                        else => {},
+                    }
+                    self.i += 1;
+                    found = true;
+                },
+                Quoted.SINGLE => {
+                    switch (self.code[self.i]) {
+                        '\'' => quoted = Quoted.NONE,
+                        else => {},
+                    }
+                    self.i += 1;
+                    found = true;
+                },
+            }
         }
-        if(!found) {
+        if(!found or quoted != Quoted.NONE) {
             self.i = self.start;
             return null;
         }
@@ -240,11 +287,7 @@ pub const Parser = struct {
             return null;
         }
 
-        // const len = self.i - self.start;
-        // @memcpy(self.content[0..len], self.code[self.start..self.i]);
-        // self.content_len = len;
         log("Found Word: {s}\n", .{self.code[self.start..self.i]});
-        // self.token = TokenType.WORD;
         return self.code[self.start..self.i];
     }
     fn lexAssignment(self: *Parser) ?ast.AssignmentWords {
@@ -264,12 +307,7 @@ pub const Parser = struct {
             self.i = self.start;
             return null; // couldnt find = sign
         }
-        // const len = self.i - self.start;
-        // @memcpy(self.content[0..len], self.code[self.start..self.i]);
-        // self.content_len = len;
         log("Found Assignment Word: {s}\n", .{self.code[self.start..self.i]});
-        // self.token = TokenType.ASSIGNMENT_WORD;
-        // return self.code[self.start..self.i];
         return .{
             .name = self.code[self.start..eql_index.?],
             .value = self.code[eql_index.?+1..self.i]
@@ -299,68 +337,96 @@ pub const Parser = struct {
         }
     }
 
-    fn contentClear(self: *Parser) void {
-        @memset(&self.content, 0);
-        self.content_len = 0;
-    }
-
     // skips " " and "\t" not newline, use skipNewlines for that
     fn skipWhitespace(self: *Parser) usize {
-        std.debug.assert(self.quoted==Quoted.QUOTED_NONE);
         const start = self.i;
         while (self.i<self.code.len and helper.WhitespaceChars[self.code[self.i]]) self.i+=1;
         return self.i - start;
     }
 
     fn skipNewlines(self: *Parser) usize {
-        std.debug.assert(self.quoted==Quoted.QUOTED_NONE);
         const start = self.i;
         while (self.i<self.code.len and self.code[self.i]=='\n') self.i+=1;
         return self.i - start;
     }
 };
 
+test "parse simple command with a single word" {
+    var parser = Parser.init();
+    const program = parser.run("ls") orelse return error.TestExpectedProgram;
 
-// test "Basic Lexer" {
-//     var rzx = Lexer.init();
-//     // defer rzx.deinit();
-//     var token_list: std.ArrayList(Token) = .empty;
+    try std.testing.expectEqual(@as(usize, 1), program.andors.items.len);
+    const andor = program.andors.items[0];
+    try std.testing.expectEqual(@as(usize, 1), andor.pipelines.items.len);
+    const pipeline = andor.pipelines.items[0];
+    try std.testing.expectEqual(@as(usize, 1), pipeline.cmds.items.len);
+    const sc = pipeline.cmds.items[0].simple_command;
+    try std.testing.expectEqualStrings("ls", sc.cmd.?);
+    try std.testing.expectEqual(@as(usize, 0), sc.args.items.len);
+    try std.testing.expectEqual(@as(usize, 0), sc.assignments.items.len);
+}
 
-//     try rzx.run("ls", &token_list);
-//     try rzx.run("ls -l", &token_list);
-//     try rzx.run("ls -l /home/user", &token_list);
-//     try rzx.run("cd ..", &token_list);
-// }
+test "parse simple command with arguments" {
+    var parser = Parser.init();
+    const program = parser.run("echo hello world") orelse return error.TestExpectedProgram;
 
-// test "String Run" {
-//     var rzx = Lexer.init();
-//     // defer rzx.deinit();
-//     var token_list: std.ArrayList(Token) = .empty;
-//     try rzx.run("echo \"hello world\"", &token_list);
-//     try rzx.run("echo 'hello world'", &token_list);
-//     try rzx.run("echo \"a string with 'single' quotes\"", &token_list);
-//     try rzx.run("echo 'a string with \"double\" quotes'", &token_list);
-//     try rzx.run("ls \"my report.txt\"", &token_list);
-//     try rzx.run("echo \"   spaces  leading and trailing   \"", &token_list);
-// }
-// test "Variable Run" {
-//     var rzx = Lexer.init();
-//     // defer rzx.deinit();
-//     var token_list: std.ArrayList(Token) = .empty;
-//     try rzx.run("echo $VAR", &token_list);
-//     try rzx.run("echo \"value: $HOME\"", &token_list);
-//     try rzx.run("myvar=hello", &token_list);
-//     try rzx.run("PATH=$PATH:/usr/bin", &token_list);
-//     try rzx.run("echo ${BRACES}", &token_list);
-//     try rzx.run("echo ${BRACES:-test}", &token_list);
-// }
+    const sc = program.andors.items[0].pipelines.items[0].cmds.items[0].simple_command;
+    try std.testing.expectEqualStrings("echo", sc.cmd.?);
+    try std.testing.expectEqual(@as(usize, 2), sc.args.items.len);
+    try std.testing.expectEqualStrings("hello", sc.args.items[0]);
+    try std.testing.expectEqualStrings("world", sc.args.items[1]);
+}
 
-// test "Random Run" {
-//     var rzx = Lexer.init();
-//     // defer rzx.deinit();
-//     var token_list: std.ArrayList(Token) = .empty;
-//     try rzx.run("", &token_list);
-//     try rzx.run("   ls   -l   ", &token_list);
-//     try rzx.run("cmd | grep \"foo\"", &token_list);
-//     try rzx.run("ls -a -l -h", &token_list);
-// }
+test "parse a bare variable assignment" {
+    var parser = Parser.init();
+    const program = parser.run("FOO=bar") orelse return error.TestExpectedProgram;
+
+    const sc = program.andors.items[0].pipelines.items[0].cmds.items[0].simple_command;
+    try std.testing.expectEqual(@as(?[]const u8, null), sc.cmd);
+    try std.testing.expectEqual(@as(usize, 1), sc.assignments.items.len);
+    try std.testing.expectEqualStrings("FOO", sc.assignments.items[0].name);
+    try std.testing.expectEqualStrings("bar", sc.assignments.items[0].value);
+}
+
+test "parse a two-stage pipeline" {
+    var parser = Parser.init();
+    const program = parser.run("ls | grep foo") orelse return error.TestExpectedProgram;
+
+    const pipeline = program.andors.items[0].pipelines.items[0];
+    try std.testing.expectEqual(@as(usize, 2), pipeline.cmds.items.len);
+
+    const first = pipeline.cmds.items[0].simple_command;
+    try std.testing.expectEqualStrings("ls", first.cmd.?);
+
+    const second = pipeline.cmds.items[1].simple_command;
+    try std.testing.expectEqualStrings("grep", second.cmd.?);
+    try std.testing.expectEqualStrings("foo", second.args.items[0]);
+}
+
+test "parse a list with a separator and a backgrounded command" {
+    var parser = Parser.init();
+    const program = parser.run("ls; sleep 1 &") orelse return error.TestExpectedProgram;
+
+    try std.testing.expectEqual(@as(usize, 2), program.andors.items.len);
+
+    const first_cmd = program.andors.items[0].pipelines.items[0].cmds.items[0].simple_command;
+    try std.testing.expectEqualStrings("ls", first_cmd.cmd.?);
+
+    const second_cmd = program.andors.items[1].pipelines.items[0].cmds.items[0].simple_command;
+    try std.testing.expectEqualStrings("sleep", second_cmd.cmd.?);
+    try std.testing.expectEqualStrings("1", second_cmd.args.items[0]);
+
+    try std.testing.expectEqual(@as(usize, 2), program.background.items.len);
+    try std.testing.expectEqual(false, program.background.items[0]);
+    try std.testing.expectEqual(true, program.background.items[1]);
+}
+
+test "parse a basic print string" {
+    var parser = Parser.init();
+    const program = parser.run("echo \"Hello World!!!\"") orelse return error.TestExpectedProgram;
+
+    const sc = program.andors.items[0].pipelines.items[0].cmds.items[0].simple_command;
+    try std.testing.expectEqualStrings("echo", sc.cmd.?);
+    try std.testing.expectEqual(@as(usize, 1), sc.args.items.len);
+    try std.testing.expectEqualStrings("\"Hello World!!!\"", sc.args.items[0]);
+}

@@ -55,7 +55,8 @@ pub const repl = struct {
     }
     pub fn eval(self: *repl) void {
         var rzxparser = rzx.Parser.init();
-        rzxparser.run(self.code[0..self.code_len]);
+        _ = rzxparser.run(self.code[0..self.code_len]);
+        // if (ret==null) @panic("NULL");
         // var lexer = l.Lexer.init();
         // const token_list = lexer.run(self.code[0..self.code_len]) catch unreachable;
         // for (token_list.items) |token| {

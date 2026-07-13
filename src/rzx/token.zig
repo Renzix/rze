@@ -10,9 +10,9 @@ pub const TokenType = enum {
 };
 
 pub const Quoted = enum {
-    QUOTED_NONE,
-    QUOTED_DOUBLE,
-    QUOTED_SINGLE,
+    NONE,
+    DOUBLE,
+    SINGLE,
 };
 
 fn Charset(comptime chars: []const u8) [256]bool {

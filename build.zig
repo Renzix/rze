@@ -46,6 +46,20 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("testvm", "Run VM unit tests");
     test_step.dependOn(&run_vm_tests.step);
 
+    const rzx_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/rzx/parser.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+        }),
+    });
+
+    const run_rzx_tests = b.addRunArtifact(rzx_tests);
+
+    const rzx_test_step = b.step("testrzx", "Run rzx parser unit tests");
+    rzx_test_step.dependOn(&run_rzx_tests.step);
+
     if (b.args) |args| {
         run_cmd.addArgs(args);
     }
