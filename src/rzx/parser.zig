@@ -44,6 +44,7 @@ pub const Parser = struct {
         // }
     }
 
+    // complete command and list
     fn parseCompleteCommandList(self: *Parser) bool {
         while (true) {
             _ = self.parseAndOr();
@@ -64,6 +65,7 @@ pub const Parser = struct {
             _ = self.skipWhitespace();
             if (self.lexString("&&")) {
                 _ = self.skipWhitespace();
+                _ = self.skipNewlines();
                 continue;
             }
             break;
@@ -71,20 +73,16 @@ pub const Parser = struct {
         return true;
     }
 
+    // Pipeline and pipeline sequence
     fn parsePipeline(self: *Parser) bool {
         _ = self.skipWhitespace();
         _ = self.lexChar('!'); // handle this
-        const ret = self.parsePipeSequence();
-        return ret;
-    }
-
-    fn parsePipeSequence(self: *Parser) bool {
         while(true) {
             _ = self.parseCommand();
             _ = self.skipWhitespace();
             if (self.lexChar('|')) {
-                // self.i+=1;
                 _ = self.skipWhitespace();
+                _ = self.skipNewlines();
                 continue;
             }
             break;
@@ -92,7 +90,7 @@ pub const Parser = struct {
         return true;
     }
     fn parseCommand(self: *Parser) bool {
-        // function
+        // function command
         // compound command and optional redirect
         _ = self.parseSimpleCommand();
         return false;
@@ -305,10 +303,19 @@ pub const Parser = struct {
         @memset(&self.content, 0);
         self.content_len = 0;
     }
+
+    // skips " " and "\t" not newline, use skipNewlines for that
     fn skipWhitespace(self: *Parser) usize {
         std.debug.assert(self.quoted==Quoted.QUOTED_NONE);
         const start = self.i;
-        while (self.i<self.code.len and self.code[self.i]==' ') self.i+=1;
+        while (self.i<self.code.len and helper.WhitespaceChars[self.code[self.i]]) self.i+=1;
+        return self.i - start;
+    }
+
+    fn skipNewlines(self: *Parser) usize {
+        std.debug.assert(self.quoted==Quoted.QUOTED_NONE);
+        const start = self.i;
+        while (self.i<self.code.len and self.code[self.i]=='\n') self.i+=1;
         return self.i - start;
     }
 };

@@ -28,3 +28,5 @@ pub const WordChars = Charset("abcdefghijklmnopqrstuvwxyz"
 pub const AssignmentChars = Charset("abcdefghijklmnopqrstuvwxyz"
     ++ "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     ++ "0123456789" ++ "_${}\"'" ++ "=");
+
+pub const WhitespaceChars = Charset(" \t");
