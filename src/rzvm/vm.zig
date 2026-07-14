@@ -179,85 +179,11 @@ test "load int" {
     // for (bytecode) |val| {
     //     std.debug.print("program: {b:0>8}\n", .{val});
     // }
+    const reg0: u64 = @bitCast(rzval.RzValue.initInt(1012 - 5));
+    std.debug.print("reg0: {}\n", .{reg0});
 
     try vm.run(&bytecode);
+    std.debug.assert(vm.registers[0] == reg0);
     // vm.printstack();
     vm.dump();
 }
-
-// test "Adding" {
-//     var vm = rzvm.init();
-//     // defer rzvm.deinit();
-//     // integer overflow on loop 3
-//     const arr1 = [_]i48{ 5, 2, 140737488355327 };
-//     const arr2 = [_]i48{ 8, -2, 1 };
-//     for (arr1, arr2, 0..) |i, j, k| {
-//         var bytecode =
-//             [_]u8{
-//                 @intFromEnum(opcodes.PUSH),
-//             } ++ rzval.RzValue.initInt(i).toBytes() ++
-//             [_]u8{
-//                 @intFromEnum(opcodes.PUSH),
-//             } ++ rzval.RzValue.initInt(j).toBytes() ++
-//             [_]u8{
-//                 @intFromEnum(opcodes.ADD),
-//             } ++
-//             [_]u8{@intFromEnum(opcodes.EXIT)};
-//         // for (bytecode, 0..) |val, i| {
-//         //     std.debug.print("{:<3}: {b:0>8}\n", .{ i, val });
-//         // }
-
-//         try vm.run(&bytecode);
-//         const ret = vm.pop();
-//         std.debug.print("k: {}\n", .{k});
-//         if (k == 2) {
-//             std.debug.assert(ret.err == 1 and
-//                 @as(rzval.vmerr, @enumFromInt(ret.data)) == rzval.vmerr.ADD_OVERFLOW);
-//         } else {
-//             std.debug.print("({} + {}) == {}\n", .{ arr1[k], arr2[k], ret.data });
-//             std.debug.assert((arr1[k] + arr2[k]) == ret.data);
-//         }
-//         vm.reset();
-//     }
-//     const arr3 = [_]f32{ 3.14, 4, -0.0, std.math.inf(f32) };
-//     const arr4 = [_]f32{ 0.1, 0.4, 0.0, 5 };
-//     for (arr3, arr4, 0..) |i, j, k| {
-//         var bytecode =
-//             [_]u8{
-//                 @intFromEnum(opcodes.PUSH),
-//             } ++ rzval.RzValue.initFloat(i).toBytes() ++
-//             [_]u8{
-//                 @intFromEnum(opcodes.PUSH),
-//             } ++ rzval.RzValue.initFloat(j).toBytes() ++
-//             [_]u8{
-//                 @intFromEnum(opcodes.ADD),
-//             } ++
-//             [_]u8{@intFromEnum(opcodes.EXIT)};
-//         // for (bytecode, 0..) |val, i| {
-//         //     std.debug.print("{:<3}: {b:0>8}\n", .{ i, val });
-//         // }
-
-//         try vm.run(&bytecode);
-//         const ret = vm.pop();
-//         const retdata: f32 = @bitCast(@as(u32, @intCast(ret.data)));
-//         std.debug.print("({} + {}) == {}\n", .{ arr3[k], arr4[k], retdata });
-//         std.debug.assert((arr3[k] + arr4[k]) == retdata);
-//         vm.reset();
-//     }
-//     var bytecode =
-//         [_]u8{
-//             @intFromEnum(opcodes.PUSH),
-//         } ++ rzval.RzValue.initFloat(3.1415).toBytes() ++
-//         [_]u8{
-//             @intFromEnum(opcodes.PUSH),
-//         } ++ rzval.RzValue.initInt(42).toBytes() ++
-//         [_]u8{
-//             @intFromEnum(opcodes.ADD),
-//         } ++
-//         [_]u8{@intFromEnum(opcodes.EXIT)};
-
-//     try vm.run(&bytecode);
-//     const ret = vm.pop();
-//     const retdata: f32 = @bitCast(@as(u32, @intCast(ret.data)));
-//     std.debug.assert((3.1415 + 42.0) == retdata);
-// }

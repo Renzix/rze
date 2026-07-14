@@ -2,7 +2,7 @@ const std = @import("std");
 
 const l = @import("rzl/lexer.zig");
 const p = @import("rzl/parser.zig");
-const c = @import("rzl/compiler.zig");
+// const c = @import("rzl/compiler.zig");
 const rzx = @import("rzx/parser.zig");
 
 // In src/repl.zig
