@@ -10,7 +10,6 @@ const helper = @import("token.zig");
 // @TODO(Renzix): Update LexAssignment to new WORD parsing
 // @TODO(Renzix): Command subsitution and backtick
 // @TODO(Renzix): Run() verify everything was consumed
-// @TODO(Renzix): Remove self.start in favour of local const start = self.i
 // @TODO(Renzix): Redirection consumed but discarded, need to add more redirection
 // @TODO(Renzix): !foo is a command but being parsed as a pipeline
 // @TODO(Renzix): Comments
@@ -29,7 +28,6 @@ const helper = @import("token.zig");
 pub const Parser = struct {
     code: []const u8,
     i: usize,
-    start: usize,
 
     const allocator = std.heap.c_allocator;
 
@@ -37,7 +35,6 @@ pub const Parser = struct {
         return Parser{
             .code = undefined,
             .i = 0,
-            .start = 0,
         };
     }
     pub fn run(self: *Parser, str: []const u8) ?ast.Program {
@@ -191,7 +188,6 @@ pub const Parser = struct {
     }
 
     fn lexIoFile(self: *Parser) ?ast.IoRedirection {
-        self.start = self.i;
         if (self.i >= self.code.len) return null;
         switch(self.code[self.i]) {
             '>' => {
@@ -256,7 +252,7 @@ pub const Parser = struct {
 
     fn lexWord(self: *Parser) ?std.ArrayList(ast.Word) {
         var w: std.ArrayList(ast.Word) = .empty;
-        self.start = self.i;
+        const start = self.i;
         while (self.i < self.code.len) {
             const ok = switch (self.code[self.i]) {
                 '\'' => self.lexSingleQuote(&w),
@@ -270,9 +266,9 @@ pub const Parser = struct {
                             self.lexLiterals(&w)
                         else break,
             };
-            if (!ok) { self.i = self.start; return null; }
+            if (!ok) { self.i = start; return null; }
         }
-        if (self.i == self.start) return null;
+        if (self.i == start) return null;
         return w;
     }
 
@@ -472,7 +468,7 @@ pub const Parser = struct {
     }
 
     fn lexAssignment(self: *Parser) ?ast.AssignmentWords {
-        self.start = self.i;
+        const start = self.i;
         var found=false;
         var eql_index: ?usize = null;
         while(self.i < self.code.len and helper.AssignmentChars[self.code[self.i]]) {
@@ -481,25 +477,25 @@ pub const Parser = struct {
             found=true;
         }
         if(!found) {
-            self.i = self.start;
+            self.i = start;
             return null; // no characters
         }
         if (eql_index==null) {
-            self.i = self.start;
+            self.i = start;
             return null; // couldnt find = sign
         }
-        log("Found Assignment Word: {s}", .{self.code[self.start..self.i]});
+        log("Found Assignment Word: {s}", .{self.code[start..self.i]});
         return .{
-            .name = self.code[self.start..eql_index.?],
+            .name = self.code[start..eql_index.?],
             .value = self.code[eql_index.?+1..self.i]
         };
     }
 
     fn lexString(self: *Parser, comptime str: []const u8) bool {
-        self.start = self.i;
+        const start = self.i;
         for (str) |char| {
             if(self.i >= self.code.len or self.code[self.i]!=char) {
-                self.i=self.start;
+                self.i=start;
                 return false;
             }
             self.i+=1;
