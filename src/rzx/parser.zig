@@ -7,6 +7,22 @@ const ast = @import("ast.zig");
 
 const helper = @import("token.zig");
 
+// @TODO(Renzix): Update LexAssignment to new WORD parsing
+// @TODO(Renzix): Command subsitution and backtick
+// @TODO(Renzix): Run() verify everything was consumed
+// @TODO(Renzix): Remove self.start in favour of local const start = self.i
+// @TODO(Renzix): Redirection consumed but discarded, need to add more redirection
+// @TODO(Renzix): !foo is a command but being parsed as a pipeline
+// @TODO(Renzix): Comments
+// @TODO(Renzix): Actual memory management
+// @TODO(Renzix): Readable Errors?
+// @TODO(Renzix): && value is parsed as valid syntax (should error)
+// @TODO(Renzix): Testing for "${var}", "pre${var}post", echo "x$HOME.y"z, a\ b
+// @TODO(Renzix): Testing for ls -l, echo $, echo "", !foo
+// @TODO(Renzix): Globbing \* is different from *
+// @TODO(Renzix): ${Parameter:-Expansions}
+// @TODO(Renzix): $(()) arithmatic (wtf... a parser within a parser????)
+
 // we parse and lex at the same time for shell!!!
 // Heavily based off of the grammar rules
 // HERE https://pubs.opengroup.org/onlinepubs/9799919799/
