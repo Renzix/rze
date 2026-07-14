@@ -1,4 +1,5 @@
 const std = @import("std");
+const Quoted = @import("token.zig").Quoted;
 
 pub const Program = struct {
     andors: std.ArrayList(AndOr),
@@ -25,8 +26,8 @@ pub const Command = union(CommandTypes) {
 
 pub const SimpleCommand = struct {
     assignments: std.ArrayList(AssignmentWords),
-    cmd: ?[]const u8,
-    args: std.ArrayList([]const u8),
+    cmd: ?std.ArrayList(Word),
+    args: std.ArrayList(std.ArrayList(Word)),
     redirects: std.ArrayList(IoRedirection),
 };
 
@@ -54,11 +55,12 @@ pub const Redirect = enum {
 
 pub const IoRedirection = struct {
     typ: Redirect,
-    filename: []const u8,
+    filename: std.ArrayList(Word),
 };
 
+pub const ExpandTypes = enum { variable, variable_bracket, command };
 pub const WordTypes = enum { literal, expand };
 pub const Word = union(WordTypes) {
-    literal: []const u8,
-    expand: []const u8,
+    literal: struct { text: []const u8, quoted: Quoted },
+    expand: struct { name: []const u8, typ: ExpandTypes },
 };

@@ -23,10 +23,14 @@ fn Charset(comptime chars: []const u8) [256]bool {
 
 pub const WordChars = Charset("abcdefghijklmnopqrstuvwxyz"
     ++ "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    ++ "0123456789" ++ "_${}\"'.");
+    ++ "0123456789" ++ "_${}\"'.\\-/*?[]=:~+,@%#");
 
 pub const AssignmentChars = Charset("abcdefghijklmnopqrstuvwxyz"
     ++ "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     ++ "0123456789" ++ "_${}\"'" ++ "=");
 
 pub const WhitespaceChars = Charset(" \t");
+
+pub const VariableChars = Charset("abcdefghijklmnopqrstuvwxyz"
+    ++ "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    ++ "0123456789" ++ "}_");
