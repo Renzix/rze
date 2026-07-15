@@ -22,7 +22,6 @@ const helper = @import("token.zig");
 // @TODO(Renzix): Globbing \* is different from *
 // @TODO(Renzix): ${Parameter:-Expansions}
 // @TODO(Renzix): $(()) arithmatic (wtf... a parser within a parser????)
-// @TODO(Renzix): Fix "echo $$$" and "test=$"
 
 // we parse and lex at the same time for shell!!!
 // Heavily based off of the grammar rules
@@ -259,11 +258,7 @@ pub const Parser = struct {
             const ok = switch (self.code[self.i]) {
                 '\'' => self.lexSingleQuote(&w),
                 '"' => self.lexDoubleQuote(&w),
-                '$' => ret: {
-                    if (self.i+1 >= self.code.len) break :ret false;
-                    if (self.code[self.i+1] == ' ') { self.i += 1; break :ret true; } // if $ is alone then continue
-                    break :ret self.lexExpansion(&w, Quoted.NONE);
-                },
+                '$' => self.lexDollar(&w, Quoted.NONE),
                 else => if(helper.WordChars[self.code[self.i]])
                             self.lexLiterals(&w)
                         else break,
@@ -316,7 +311,8 @@ pub const Parser = struct {
                         w.append(allocator, lit) catch @panic("oom");
                         log("Found Double Quote: \"{s}\"", .{lit.literal.text});
                     }
-                    if (!self.lexExpansion(w, Quoted.DOUBLE)) return false;
+                    // @TODO(Renzix): if "$ " then ignore
+                    if (!self.lexDollar(w, Quoted.DOUBLE)) return false;
                     start = self.i;
                     continue;
                 },
@@ -368,17 +364,60 @@ pub const Parser = struct {
         return true;
     }
 
-
-    fn lexExpansion(self: *Parser, w: *std.ArrayList(ast.Word), q: Quoted) bool {
-        // this should always result in a expand str
-        if (self.code[self.i]=='$') { self.i += 1; } else { return false; }
-        const typ = switch (self.code[self.i]) {
-            '(' => ast.ExpandTypes.command,
-            '{' => ast.ExpandTypes.variable_bracket,
-            else => ast.ExpandTypes.variable,
+    fn lexDollar(self: *Parser, w: *std.ArrayList(ast.Word), q: Quoted) bool {
+        if (!self.nextChar()) return false;
+        // this ch thing is for the edge case of "echo $" so i dont go out of bounds
+        const ch: u8 = if (self.i < self.code.len) self.code[self.i] else ' ';
+        return blk: {
+            switch (ch) {
+                'a'...'z', 'A'...'Z',
+                '_' => {
+                    break :blk self.lexExpansion(w, q, ast.ExpandTypes.variable);
+                },
+                '0'...'9', '@', '*', '#',
+                '?', '-', '$', '!' => {
+                    break :blk self.lexSpecial(w, q);
+                },
+                '(' => {
+                    unreachable; // @TODO(Renzix): Command Subsitution
+                },
+                '{' => {
+                    if (!self.nextChar()) return false;
+                    break :blk self.lexExpansion(w, q, ast.ExpandTypes.variable_bracket);
+                },
+                else => {
+                    const lit: ast.Word = .{
+                        .literal = .{
+                            .text = self.code[self.i-1..self.i],
+                            .quoted = q,
+                        },
+                    };
+                    w.append(allocator, lit) catch @panic("oom");
+                    log("Lone $: |{s}|", .{lit.literal.text});
+                    break :blk true;
+                },
+            }
         };
+    }
+
+    fn lexSpecial(self: *Parser, w: *std.ArrayList(ast.Word), q: Quoted) bool {
+        const exp: ast.Word = .{
+            .expand = .{
+                .name = self.code[self.i..self.i+1],
+                .quoted = q,
+                .typ = ast.ExpandTypes.variable,
+            },
+        };
+        if(!self.nextChar()) return false;
+        w.append(allocator, exp) catch @panic("oom");
+        log("Special Variable: ${s}", .{exp.expand.name});
+        return true;
+    }
+
+    fn lexExpansion(self: *Parser, w: *std.ArrayList(ast.Word),
+                    q: Quoted, typ: ast.ExpandTypes) bool {
+        // this should always result in a expand str
         const delim = @intFromBool(typ != ast.ExpandTypes.variable);
-        self.i += delim;
         const start = self.i;
         while(self.i < self.code.len) {
             if(helper.VariableChars[self.code[self.i]]) {
@@ -403,6 +442,7 @@ pub const Parser = struct {
         log("Found Expandable Word: {s}", .{exp.expand.name});
         return true;
     }
+
     fn lexLiterals(self: *Parser, w: *std.ArrayList(ast.Word)) bool {
         // can be a expand string or may not be
         var start = self.i;
@@ -424,11 +464,7 @@ pub const Parser = struct {
                         const ok = switch (ch) {
                             '"' => self.lexDoubleQuote(w),
                             '\'' => self.lexSingleQuote(w),
-                            '$' => ret: {
-                                if (self.i+1 >= self.code.len) break :ret false;
-                                if (self.code[self.i+1] == ' ') { self.i += 1; break :ret true; } // if $ is alone then continue
-                                break :ret self.lexExpansion(w, Quoted.NONE);
-                            },
+                            '$' => self.lexDollar(w, Quoted.NONE),
                             '\\' => ret: { // @TODO(Renzix): This could probably not be its own function
                                 if ((self.i+1) >= self.code.len) return false;
                                 switch (self.code[self.i+1]) {
@@ -473,7 +509,7 @@ pub const Parser = struct {
     fn lexAssignment(self: *Parser) ?ast.AssignmentWord {
         // parse the until =, if you dont hit = return FALSE because this isnt a
         // assignment!!1! WOW
-        var start = self.i;
+        const start = self.i;
         {
             const ok = while (self.i < self.code.len) : (self.i += 1) {
                 switch (self.code[self.i]) {
@@ -488,16 +524,11 @@ pub const Parser = struct {
         if(!self.nextChar()) return null; // get rid of the =
 
         var w: std.ArrayList(ast.Word) = .empty;
-        start = self.i;
         while (self.i < self.code.len) {
             const ok = switch (self.code[self.i]) {
                 '\'' => self.lexSingleQuote(&w),
                 '"' => self.lexDoubleQuote(&w),
-                '$' => ret: {
-                    if (self.i+1 >= self.code.len) break :ret false;
-                    if (self.code[self.i+1] == ' ') { self.i += 1; break :ret true; } // if $ is alone then continue
-                    break :ret self.lexExpansion(&w, Quoted.NONE);
-                },
+                '$' => self.lexDollar(&w, Quoted.NONE),
                 else => if(helper.WordChars[self.code[self.i]])
                             self.lexLiterals(&w)
                         else break,
