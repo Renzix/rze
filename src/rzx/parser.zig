@@ -10,7 +10,6 @@ const helper = @import("token.zig");
 // @TODO(Renzix): Complex commands (if, for, while etc)
 // @TODO(Renzix): function definitions
 // @TODO(Renzix): Command subsitution and backtick
-// @TODO(Renzix): Run() verify everything was consumed
 // @TODO(Renzix): Redirection consumed but discarded, need to add more redirection
 // @TODO(Renzix): !foo is a command but being parsed as a pipeline
 // @TODO(Renzix): Comments
