@@ -22,6 +22,7 @@ const helper = @import("token.zig");
 // @TODO(Renzix): Globbing \* is different from *
 // @TODO(Renzix): ${Parameter:-Expansions}
 // @TODO(Renzix): $(()) arithmatic (wtf... a parser within a parser????)
+// @TODO(Renzix): Fix "echo $$$" and "test=$"
 
 // we parse and lex at the same time for shell!!!
 // Heavily based off of the grammar rules
@@ -261,7 +262,7 @@ pub const Parser = struct {
                 '$' => ret: {
                     if (self.i+1 >= self.code.len) break :ret false;
                     if (self.code[self.i+1] == ' ') { self.i += 1; break :ret true; } // if $ is alone then continue
-                    break :ret self.lexExpansion(&w);
+                    break :ret self.lexExpansion(&w, Quoted.NONE);
                 },
                 else => if(helper.WordChars[self.code[self.i]])
                             self.lexLiterals(&w)
@@ -315,7 +316,7 @@ pub const Parser = struct {
                         w.append(allocator, lit) catch @panic("oom");
                         log("Found Double Quote: \"{s}\"", .{lit.literal.text});
                     }
-                    if (!self.lexExpansion(w)) return false;
+                    if (!self.lexExpansion(w, Quoted.DOUBLE)) return false;
                     start = self.i;
                     continue;
                 },
@@ -368,7 +369,7 @@ pub const Parser = struct {
     }
 
 
-    fn lexExpansion(self: *Parser, w: *std.ArrayList(ast.Word)) bool {
+    fn lexExpansion(self: *Parser, w: *std.ArrayList(ast.Word), q: Quoted) bool {
         // this should always result in a expand str
         if (self.code[self.i]=='$') { self.i += 1; } else { return false; }
         const typ = switch (self.code[self.i]) {
@@ -394,6 +395,7 @@ pub const Parser = struct {
             .expand = .{
                 .name = self.code[start..self.i],
                 .typ  = typ,
+                .quoted = q,
             },
         };
         self.i += delim;
@@ -425,7 +427,7 @@ pub const Parser = struct {
                             '$' => ret: {
                                 if (self.i+1 >= self.code.len) break :ret false;
                                 if (self.code[self.i+1] == ' ') { self.i += 1; break :ret true; } // if $ is alone then continue
-                                break :ret self.lexExpansion(w);
+                                break :ret self.lexExpansion(w, Quoted.NONE);
                             },
                             '\\' => ret: { // @TODO(Renzix): This could probably not be its own function
                                 if ((self.i+1) >= self.code.len) return false;
@@ -494,7 +496,7 @@ pub const Parser = struct {
                 '$' => ret: {
                     if (self.i+1 >= self.code.len) break :ret false;
                     if (self.code[self.i+1] == ' ') { self.i += 1; break :ret true; } // if $ is alone then continue
-                    break :ret self.lexExpansion(&w);
+                    break :ret self.lexExpansion(&w, Quoted.NONE);
                 },
                 else => if(helper.WordChars[self.code[self.i]])
                             self.lexLiterals(&w)

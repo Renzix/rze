@@ -62,5 +62,5 @@ pub const ExpandTypes = enum { variable, variable_bracket, command };
 pub const WordTypes = enum { literal, expand };
 pub const Word = union(WordTypes) {
     literal: struct { text: []const u8, quoted: Quoted },
-    expand: struct { name: []const u8, typ: ExpandTypes },
+    expand: struct { name: []const u8, quoted: Quoted, typ: ExpandTypes },
 };
