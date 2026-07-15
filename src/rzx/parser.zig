@@ -16,8 +16,8 @@ const helper = @import("token.zig");
 // @TODO(Renzix): Actual memory management
 // @TODO(Renzix): Readable Errors?
 // @TODO(Renzix): && value is parsed as valid syntax (should error)
-// @TODO(Renzix): Testing for "${var}", "pre${var}post", echo "x$HOME.y"z, a\ b
-// @TODO(Renzix): Testing for ls -l, echo $, echo "", !foo
+// @TODO(Renzix): Testing for "${var}", "pre${var}post", echo "x$HOME.y"z, a\ b,
+//                ls -l, echo $, echo "", !foo
 // @TODO(Renzix): Globbing \* is different from *
 // @TODO(Renzix): ${Parameter:-Expansions}
 // @TODO(Renzix): $(()) arithmatic (wtf... a parser within a parser????)
@@ -76,13 +76,15 @@ pub const Parser = struct {
             }
             _ = self.skipWhitespace();
             if (self.lexString("&&")) {
-                andor.and_or_list.append(allocator, ast.AndOrIf.and_if) catch @panic("oom");
+                andor.and_or_list.append(allocator, ast.AndOrIf.and_if)
+                    catch @panic("oom");
                 _ = self.skipWhitespace();
                 _ = self.skipNewlines();
                 continue;
             }
             if (self.lexString("||")) {
-                andor.and_or_list.append(allocator, ast.AndOrIf.or_if) catch @panic("oom");
+                andor.and_or_list.append(allocator, ast.AndOrIf.or_if)
+                    catch @panic("oom");
                 _ = self.skipWhitespace();
                 _ = self.skipNewlines();
                 continue;
@@ -213,7 +215,10 @@ pub const Parser = struct {
                             const file = self.lexWord();
                             if(file==null)
                                 @panic("expected filename, io_redirect with no filename");
-                            return .{ .typ = ast.Redirect.GREATTHAN, .filename = file.? };
+                            return .{
+                                .typ = ast.Redirect.GREATTHAN,
+                                .filename = file.?
+                            };
                         }
                     }
                 } else {
@@ -238,7 +243,10 @@ pub const Parser = struct {
                             const file = self.lexWord();
                             if(file==null)
                                 @panic("expected filename, io_redirect with no filename");
-                            return .{ .typ = ast.Redirect.LESSTHAN, .filename = file.? };
+                            return .{
+                                .typ = ast.Redirect.LESSTHAN,
+                                .filename = file.?
+                            };
                         }
                     }
                 }
@@ -269,7 +277,8 @@ pub const Parser = struct {
     }
 
     fn lexSingleQuote(self: *Parser, w: *std.ArrayList(ast.Word)) bool {
-        // parse single quotes AS IS, everything should be literal and ignore quotes
+        // parse single quotes AS IS,
+        // everything should be literal and ignore quotes
         const start = self.i;
         if (self.code[self.i]=='\'') { self.i += 1; } else { return false; }
         while(self.i < self.code.len) {
@@ -293,7 +302,7 @@ pub const Parser = struct {
     }
 
     fn lexDoubleQuote(self: *Parser, w: *std.ArrayList(ast.Word)) bool {
-        // parse double quotes, should also handle var expansion @TODO(Renzix)
+        // parse double quotes, should also handle var expansion
         var start = self.i+1;
         if (self.code[self.i]=='"') { self.i += 1; } else { return false; }
         while(self.i < self.code.len) {
@@ -329,7 +338,8 @@ pub const Parser = struct {
                                     }
                                 };
                                 w.append(allocator, lit) catch @panic("oom");
-                                log("Found Double Quote: \"{s}\"", .{lit.literal.text});
+                                log("Found Double Quote: \"{s}\"",
+                                    .{lit.literal.text});
                             }
                             if(!self.nextChar()) return false;
                             if (ch!='\n') start = self.i;
@@ -365,7 +375,8 @@ pub const Parser = struct {
 
     fn lexDollar(self: *Parser, w: *std.ArrayList(ast.Word), q: Quoted) bool {
         if (!self.nextChar()) return false;
-        // this ch thing is for the edge case of "echo $" so i dont go out of bounds
+        // this ch thing is for the edge case of "echo $"
+        // so i dont go out of bounds
         const ch: u8 = if (self.i < self.code.len) self.code[self.i] else ' ';
         return blk: {
             switch (ch) {
@@ -382,7 +393,8 @@ pub const Parser = struct {
                 },
                 '{' => {
                     if (!self.nextChar()) return false;
-                    break :blk self.lexExpansion(w, q, ast.ExpandTypes.variable_bracket);
+                    break :blk self.lexExpansion(w, q,
+                                                 ast.ExpandTypes.variable_bracket);
                 },
                 else => {
                     const lit: ast.Word = .{
@@ -463,12 +475,15 @@ pub const Parser = struct {
                             w.append(allocator, lit) catch @panic("oom");
                             log("Found Unquoted: |{s}|", .{lit.literal.text});
                         }
-                        // @TODO(Renzix): Handle "echo $ ", in this case $ should be literal
+                        // @TODO(Renzix): Handle "echo $ ",
+                        // in this case $ should be literal
                         const ok = switch (ch) {
                             '"' => self.lexDoubleQuote(w),
                             '\'' => self.lexSingleQuote(w),
                             '$' => self.lexDollar(w, Quoted.NONE),
-                            '\\' => ret: { // @TODO(Renzix): This could probably not be its own function
+                            '\\' => ret: {
+                                // @TODO(Renzix): This could probably not be its
+                                // own function
                                 if ((self.i+1) >= self.code.len) return false;
                                 switch (self.code[self.i+1]) {
                                     '\\', ' ', '$', '\n',
@@ -479,7 +494,8 @@ pub const Parser = struct {
                                         if (ch=='\n') start = self.i;
                                         continue;
                                     },
-                                    // for * make a new Word specifically for glob???
+                                    // for * make a new Word specifically for
+                                    // glob???
                                     else => break :ret self.nextChar(),
                                 }
                             },
@@ -576,7 +592,8 @@ pub const Parser = struct {
     // skips " " and "\t" not newline, use skipNewlines for that
     fn skipWhitespace(self: *Parser) usize {
         const start = self.i;
-        while (self.i<self.code.len and helper.WhitespaceChars[self.code[self.i]]) self.i+=1;
+        while (self.i<self.code.len and
+                   helper.WhitespaceChars[self.code[self.i]]) self.i+=1;
         return self.i - start;
     }
 
@@ -599,29 +616,41 @@ test "parse simple command with a single word" {
     const sc = pipeline.cmds.items[0].simple_command;
     try std.testing.expect(sc.cmd != null);
     const ls = .{ .literal = .{ .text = "ls", .quoted = Quoted.NONE } };
-    try std.testing.expectEqualStrings(ls.literal.text, sc.cmd.?.items[0].literal.text);
-    try std.testing.expectEqual(ls.literal.quoted, sc.cmd.?.items[0].literal.quoted);
+    try std.testing.expectEqualStrings(ls.literal.text,
+                                       sc.cmd.?.items[0].literal.text);
+    try std.testing.expectEqual(ls.literal.quoted,
+                                sc.cmd.?.items[0].literal.quoted);
     try std.testing.expectEqual(@as(usize, 0), sc.args.items.len);
     try std.testing.expectEqual(@as(usize, 0), sc.assignments.items.len);
 }
 
 test "parse simple command with arguments" {
     var parser = Parser.init();
-    const program = parser.run("echo hello world") orelse return error.TestExpectedProgram;
+    const program = parser.run("echo hello world")
+        orelse return error.TestExpectedProgram;
 
-    const echo: ast.Word = .{ .literal = .{ .text = "echo", .quoted = Quoted.NONE } };
-    const hello: ast.Word = .{ .literal = .{ .text = "hello", .quoted = Quoted.NONE } };
-    const world: ast.Word = .{ .literal = .{ .text = "world", .quoted = Quoted.NONE } };
+    const echo: ast.Word = .{ .literal =
+                                 .{ .text = "echo", .quoted = Quoted.NONE } };
+    const hello: ast.Word = .{ .literal =
+                                  .{ .text = "hello", .quoted = Quoted.NONE } };
+    const world: ast.Word = .{ .literal =
+                                  .{ .text = "world", .quoted = Quoted.NONE } };
 
     const sc = program.andors.items[0].pipelines.items[0].cmds.items[0].simple_command;
-    try std.testing.expectEqualStrings(echo.literal.text, sc.cmd.?.items[0].literal.text);
-    try std.testing.expectEqual(echo.literal.quoted, sc.cmd.?.items[0].literal.quoted);
+    try std.testing.expectEqualStrings(echo.literal.text,
+                                       sc.cmd.?.items[0].literal.text);
+    try std.testing.expectEqual(echo.literal.quoted,
+                                sc.cmd.?.items[0].literal.quoted);
     try std.testing.expectEqual(@as(usize, 2), sc.args.items.len);
 
-    try std.testing.expectEqualStrings(hello.literal.text, sc.args.items[0].items[0].literal.text);
-    try std.testing.expectEqual(hello.literal.quoted, sc.args.items[0].items[0].literal.quoted);
-    try std.testing.expectEqualStrings(world.literal.text, sc.args.items[1].items[0].literal.text);
-    try std.testing.expectEqual(world.literal.quoted, sc.args.items[1].items[0].literal.quoted);
+    try std.testing.expectEqualStrings(hello.literal.text,
+                                       sc.args.items[0].items[0].literal.text);
+    try std.testing.expectEqual(hello.literal.quoted,
+                                sc.args.items[0].items[0].literal.quoted);
+    try std.testing.expectEqualStrings(world.literal.text,
+                                       sc.args.items[1].items[0].literal.text);
+    try std.testing.expectEqual(world.literal.quoted,
+                                sc.args.items[1].items[0].literal.quoted);
 }
 
 // test "parse a bare variable assignment" {
@@ -643,43 +672,57 @@ test "parse simple command with arguments" {
 
 test "parse a two-stage pipeline" {
     var parser = Parser.init();
-    const program = parser.run("ls | grep foo") orelse return error.TestExpectedProgram;
+    const program = parser.run("ls | grep foo")
+        orelse return error.TestExpectedProgram;
 
     const pipeline = program.andors.items[0].pipelines.items[0];
     try std.testing.expectEqual(@as(usize, 2), pipeline.cmds.items.len);
 
     const first = pipeline.cmds.items[0].simple_command;
     const ls: ast.Word = .{ .literal = .{ .text = "ls", .quoted = Quoted.NONE } };
-    try std.testing.expectEqualStrings(ls.literal.text, first.cmd.?.items[0].literal.text);
-    try std.testing.expectEqual(ls.literal.quoted, first.cmd.?.items[0].literal.quoted);
+    try std.testing.expectEqualStrings(ls.literal.text,
+                                       first.cmd.?.items[0].literal.text);
+    try std.testing.expectEqual(ls.literal.quoted,
+                                first.cmd.?.items[0].literal.quoted);
 
     const second = pipeline.cmds.items[1].simple_command;
     const grep: ast.Word = .{ .literal = .{ .text = "grep", .quoted = Quoted.NONE } };
     const foo: ast.Word = .{ .literal = .{ .text = "foo", .quoted = Quoted.NONE } };
-    try std.testing.expectEqualStrings(grep.literal.text, second.cmd.?.items[0].literal.text);
-    try std.testing.expectEqual(grep.literal.quoted, second.cmd.?.items[0].literal.quoted);
-    try std.testing.expectEqualStrings(foo.literal.text, second.args.items[0].items[0].literal.text);
-    try std.testing.expectEqual(foo.literal.quoted, second.args.items[0].items[0].literal.quoted);
+    try std.testing.expectEqualStrings(grep.literal.text,
+                                       second.cmd.?.items[0].literal.text);
+    try std.testing.expectEqual(grep.literal.quoted,
+                                second.cmd.?.items[0].literal.quoted);
+    try std.testing.expectEqualStrings(foo.literal.text,
+                                       second.args.items[0].items[0].literal.text);
+    try std.testing.expectEqual(foo.literal.quoted,
+                                second.args.items[0].items[0].literal.quoted);
 }
 
 test "parse a list with a separator and a backgrounded command" {
     var parser = Parser.init();
-    const program = parser.run("ls; sleep 1 &") orelse return error.TestExpectedProgram;
+    const program = parser.run("ls; sleep 1 &")
+        orelse return error.TestExpectedProgram;
 
     try std.testing.expectEqual(@as(usize, 2), program.andors.items.len);
 
     const first = program.andors.items[0].pipelines.items[0].cmds.items[0].simple_command;
     const ls: ast.Word = .{ .literal = .{ .text = "ls", .quoted = Quoted.NONE } };
-    try std.testing.expectEqualStrings(ls.literal.text, first.cmd.?.items[0].literal.text);
-    try std.testing.expectEqual(ls.literal.quoted, first.cmd.?.items[0].literal.quoted);
+    try std.testing.expectEqualStrings(ls.literal.text,
+                                       first.cmd.?.items[0].literal.text);
+    try std.testing.expectEqual(ls.literal.quoted,
+                                first.cmd.?.items[0].literal.quoted);
 
     const second = program.andors.items[1].pipelines.items[0].cmds.items[0].simple_command;
     const sleep: ast.Word = .{ .literal = .{ .text = "sleep", .quoted = Quoted.NONE } };
     const one: ast.Word = .{ .literal = .{ .text = "1", .quoted = Quoted.NONE } };
-    try std.testing.expectEqualStrings(sleep.literal.text, second.cmd.?.items[0].literal.text);
-    try std.testing.expectEqual(sleep.literal.quoted, second.cmd.?.items[0].literal.quoted);
-    try std.testing.expectEqualStrings(one.literal.text, second.args.items[0].items[0].literal.text);
-    try std.testing.expectEqual(one.literal.quoted, second.args.items[0].items[0].literal.quoted);
+    try std.testing.expectEqualStrings(sleep.literal.text,
+                                       second.cmd.?.items[0].literal.text);
+    try std.testing.expectEqual(sleep.literal.quoted,
+                                second.cmd.?.items[0].literal.quoted);
+    try std.testing.expectEqualStrings(one.literal.text,
+                                       second.args.items[0].items[0].literal.text);
+    try std.testing.expectEqual(one.literal.quoted,
+                                second.args.items[0].items[0].literal.quoted);
 
     try std.testing.expectEqual(@as(usize, 2), program.background.items.len);
     try std.testing.expectEqual(false, program.background.items[0]);
@@ -688,14 +731,22 @@ test "parse a list with a separator and a backgrounded command" {
 
 test "parse a basic print string" {
     var parser = Parser.init();
-    const program = parser.run("echo \"Hello World!!!\"") orelse return error.TestExpectedProgram;
+    const program = parser.run("echo \"Hello World!!!\"")
+        orelse return error.TestExpectedProgram;
 
     const sc = program.andors.items[0].pipelines.items[0].cmds.items[0].simple_command;
     const echo: ast.Word = .{ .literal = .{ .text = "echo", .quoted = Quoted.NONE } };
     try std.testing.expectEqualStrings(echo.literal.text, sc.cmd.?.items[0].literal.text);
     try std.testing.expectEqual(echo.literal.quoted, sc.cmd.?.items[0].literal.quoted);
     try std.testing.expectEqual(@as(usize, 1), sc.args.items.len);
-    const hello_world: ast.Word = .{ .literal = .{ .text = "Hello World!!!", .quoted = Quoted.DOUBLE } };
-    try std.testing.expectEqualStrings(hello_world.literal.text, sc.args.items[0].items[0].literal.text);
-    try std.testing.expectEqual(hello_world.literal.quoted, sc.args.items[0].items[0].literal.quoted);
+    const hello_world: ast.Word = .{
+        .literal = .{
+            .text = "Hello World!!!",
+            .quoted = Quoted.DOUBLE
+        }
+    };
+    try std.testing.expectEqualStrings(hello_world.literal.text,
+                                       sc.args.items[0].items[0].literal.text);
+    try std.testing.expectEqual(hello_world.literal.quoted,
+                                sc.args.items[0].items[0].literal.quoted);
 }
