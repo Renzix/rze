@@ -401,14 +401,15 @@ pub const Parser = struct {
     }
 
     fn lexSpecial(self: *Parser, w: *std.ArrayList(ast.Word), q: Quoted) bool {
+        if(!self.nextChar()) @panic("Tried to parse special $ but got EOF");
+        // ensure that self.i is actually a special character???
         const exp: ast.Word = .{
             .expand = .{
-                .name = self.code[self.i..self.i+1],
+                .name = self.code[self.i-1..self.i],
                 .quoted = q,
                 .typ = ast.ExpandTypes.variable,
             },
         };
-        if(!self.nextChar()) return false;
         w.append(allocator, exp) catch @panic("oom");
         log("Special Variable: ${s}", .{exp.expand.name});
         return true;
@@ -439,7 +440,10 @@ pub const Parser = struct {
         };
         self.i += delim;
         w.append(allocator, exp) catch @panic("oom");
-        log("Found Expandable Word: {s}", .{exp.expand.name});
+        if (exp.expand.quoted == Quoted.DOUBLE)
+            log("Found Expandable Word: \"{s}\"", .{exp.expand.name})
+        else
+            log("Found Expandable Word: {s}", .{exp.expand.name});
         return true;
     }
 
