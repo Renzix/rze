@@ -7,6 +7,8 @@ const ast = @import("ast.zig");
 
 const helper = @import("token.zig");
 
+// @TODO(Renzix): Complex commands (if, for, while etc)
+// @TODO(Renzix): function definitions
 // @TODO(Renzix): Command subsitution and backtick
 // @TODO(Renzix): Run() verify everything was consumed
 // @TODO(Renzix): Redirection consumed but discarded, need to add more redirection
