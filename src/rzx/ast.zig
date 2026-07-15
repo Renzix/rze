@@ -25,7 +25,7 @@ pub const Command = union(CommandTypes) {
 };
 
 pub const SimpleCommand = struct {
-    assignments: std.ArrayList(AssignmentWords),
+    assignments: std.ArrayList(AssignmentWord),
     cmd: ?std.ArrayList(Word),
     args: std.ArrayList(std.ArrayList(Word)),
     redirects: std.ArrayList(IoRedirection),
@@ -38,9 +38,9 @@ pub const FunctionDefinition = struct {
     //@TODO(Renzix): Implement
 };
 
-pub const AssignmentWords = struct {
+pub const AssignmentWord = struct {
     name: []const u8,
-    value: []const u8,
+    value: ?std.ArrayList(Word),
 };
 
 pub const Redirect = enum {

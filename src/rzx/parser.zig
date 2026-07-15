@@ -7,7 +7,6 @@ const ast = @import("ast.zig");
 
 const helper = @import("token.zig");
 
-// @TODO(Renzix): Update LexAssignment to new WORD parsing
 // @TODO(Renzix): Command subsitution and backtick
 // @TODO(Renzix): Run() verify everything was consumed
 // @TODO(Renzix): Redirection consumed but discarded, need to add more redirection
@@ -147,8 +146,8 @@ pub const Parser = struct {
         while(true) {
             _ = self.skipWhitespace();
             if (self.lexAssignment()) |assign| {
-                log("variable name: {s}",.{assign.name});
-                log("variable value: {s}",.{assign.value});
+                log("Variable Name: {s}",.{assign.name});
+                log("Variable Value: {any}",.{assign.value});
                 sc.assignments.append(allocator, assign) catch @panic("oom");
                 found=true; continue;
             }
@@ -467,28 +466,41 @@ pub const Parser = struct {
         return true;
     }
 
-    fn lexAssignment(self: *Parser) ?ast.AssignmentWords {
-        const start = self.i;
-        var found=false;
-        var eql_index: ?usize = null;
-        while(self.i < self.code.len and helper.AssignmentChars[self.code[self.i]]) {
-            if (eql_index==null and self.code[self.i]=='=') eql_index=self.i;
-            self.i += 1;
-            found=true;
+    fn lexAssignment(self: *Parser) ?ast.AssignmentWord {
+        // parse the until =, if you dont hit = return FALSE because this isnt a
+        // assignment!!1! WOW
+        var start = self.i;
+        {
+            const ok = while (self.i < self.code.len) : (self.i += 1) {
+                switch (self.code[self.i]) {
+                    'a'...'z', 'A'...'Z', '0'...'9', '_' => {},
+                    '=' => break true,
+                    else => break false,
+                }
+            } else false;
+            if (!ok) { self.i = start; return null; }
         }
-        if(!found) {
-            self.i = start;
-            return null; // no characters
+        const name = self.code[start..self.i];
+        if(!self.nextChar()) return null; // get rid of the =
+
+        var w: std.ArrayList(ast.Word) = .empty;
+        start = self.i;
+        while (self.i < self.code.len) {
+            const ok = switch (self.code[self.i]) {
+                '\'' => self.lexSingleQuote(&w),
+                '"' => self.lexDoubleQuote(&w),
+                '$' => ret: {
+                    if (self.i+1 >= self.code.len) break :ret false;
+                    if (self.code[self.i+1] == ' ') { self.i += 1; break :ret true; } // if $ is alone then continue
+                    break :ret self.lexExpansion(&w);
+                },
+                else => if(helper.WordChars[self.code[self.i]])
+                            self.lexLiterals(&w)
+                        else break,
+            };
+            if (!ok) { self.i = start; return null; }
         }
-        if (eql_index==null) {
-            self.i = start;
-            return null; // couldnt find = sign
-        }
-        log("Found Assignment Word: {s}", .{self.code[start..self.i]});
-        return .{
-            .name = self.code[start..eql_index.?],
-            .value = self.code[eql_index.?+1..self.i]
-        };
+        return .{ .name = name, .value = if (w.items.len != 0) w else null };
     }
 
     fn lexString(self: *Parser, comptime str: []const u8) bool {
