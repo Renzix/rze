@@ -7,36 +7,46 @@ the rzvm. This VM is a bytecode interpreter designed to hold a few languages.
 Most bytecode interpreters are made to be more efficient then an interpreted
 language or to be able to run on multiple different operating systems. This
 bytecode interpreter is moreso made to allow multiple language to interop with
-each other. Because all of the languages should easily interop this should be
-defined in the bytecode/VM/ISA and not in the language. Any language specific
-feature should probably be apart of the ISA. The big downside of this is that
-the ISA will be large but i feel that should be OKAY.
+each other over everything else. Because all of the languages should easily
+interop this should be defined in the bytecode and not in the language. All rzvm
+languages should use rzvm constructs whenever possible and if there is not a
+construct for it, then it should be added.
 
-The main goal right now is to create the bytecode interpreter then follow it up
-with a basic lisp language. I like using standards so ideally I would attempt to
-implement Scheme. After this I could start on a simple shell (ideally
-posix-like). Once that is done for langauges i would love to attempt to
-implement lua-like or javascript-like or even try to do elisp/viml but
-realistically what i am doing is already way too much work for one person.
+This project is very ambitious and to start out my goal is to make a (mostly)
+posix compliant shell. This is import to RZE because
+1. Most people know some shell basics
+2. Most shells which do have interesting features are not posix
+3. Modern posix shells are slow and contain some archeaic choices (ie dynamic scoping)
+4. I need a language which is able to deal with strings efficiently (most shells
+   are OK at this but can be better)
+5. I need a language to invoke editor commands
+6. If the shell is good then people may want to use it without the editor
 
-After the languages are created and the featureset is usable I can start
-actually using them. Before the text editor is useful it would be motivating to
-start using RZX as my main shell. One thing shell sucks at is dealing with
-strings so adding ways to parse strings would be very benefitual. This could
-totally be a library that is in my scheme language.
+The core of the editor is planned to be written in a more stricter programming
+language. To make it easy on myself that language is probably going to be a
+scheme like language as
+1. Its well defined so I have a standard I can follow
+2. I can likely grab already existing libraries
+3. It is very dynamic so I can make changes on the fly
+4. It is simple to parse
+
+The goal will be able to easily share state between the shell and scheme
+language. If I am able to ever actually finish this I may look into doing stuff
+like supporting elisp or a lua/js like language but I doubt I would be able to
+do that. Keep in mind when i say lua/js moreso mean a lua/js like language as I
+have already made some core decisions which would make this impossible/less
+performant.
 
 RZVM numbers will have 48 bits of data and 16 bits of header data. specifically
     type_info: TypeInfo, // u8
-    ptr: u1,
-    mutable: u1,
-    nullable: u1,
-    err: u1,
+    ptr: bool,
+    mutable: bool,
+    nullable: bool,
     gc: GcBit, // u2
-    reserved: u2,
+    reserved: u3,
     data: u48,
 This means that each value being passed around between languages also has some
-other information that all languages should support. All RZVM languages should
-define functions as variables so that the other languages have access to them.
+other information that all languages should support.
 
 One particular feature I want is I should be able to do `(define func(x y) (+ x
 y)` to make a function which adds x+y. I then want to be able to call said
@@ -48,20 +58,19 @@ in each of the languages defined.
 
 ## Contribution
 
- I would not suggest contributing until I start to actually make feature
+I would not suggest contributing until I start to actually make feature
 branches because this repo is currently a mess of ideas. I may have broken the
 style a lot but the goal is to use zig's standard contribution style.
 https://ziglang.org/documentation/0.16.0/#Style-Guide . (when they exist) please
 run test code to determine if you broke anything and if there are no tests for
 your new feature then please make some basic ones.
 
-You are allowed to use AI however use of AI will be under more scrutiny then
-human code. The goal of contributing should be to learn how this project works.
-If you just want new features and dont care about vibecoding then please fork
-this project and every once in a while just pull from this repo. If you
-genuinely have no idea how this project works then asking AI is a great way to
-start. When I say this I moreso mean asking AI what particular functions do and
-how certain processes work. Once you do that you should relatively quickly
-double check the AI to ensure you actually understand. I made this project
-initially by git cloning dash and luajit and looking as much as I can at the
-sourcecode to see wtf they are doing to better understand things.
+You are allowed to use AI however please do not commit any AI code. Contributing
+should help you learn how this project works. If you just want new features and
+dont care about vibecoding then please fork this project and every once in a
+while just pull from this repo. If you genuinely have no idea how this project
+works then asking AI some basic questions is a great way to start but isnt the
+only thing you should do. After asking questions then try to test your knowledge
+by repeating back what you understand about it. If you don't think learning
+through AI is good then great, don't use it this paragraph isnt for you just
+read the source.
