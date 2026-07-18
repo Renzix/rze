@@ -72,6 +72,7 @@ pub const rzvm = struct {
                 self.pc += 1;
                 continue :vm inst.op;
             },
+            // @TODO(Renzix): Collapse add/sub/mul into one comptime value
             .add => {
                 const args = inst.args.abc;
                 const a = self.peekReg(args.a);
@@ -111,6 +112,7 @@ pub const rzvm = struct {
                 self.pc += 1;
                 continue :vm inst.op;
             },
+            // @TODO(Renzix): Collapse jmp/jz/jnz into one comptime value
             .jmp => {
                 const args = inst.args.asbx;
                 self.pc = @intCast(@as(i32, self.pc) + args.sbx);
@@ -139,7 +141,7 @@ pub const rzvm = struct {
                 self.pc += 1;
                 continue :vm inst.op;
             },
-            inline .eql, .neq  => |op| {
+            inline .eql, .neq => |op| {
                 const args = inst.args.abc;
                 const a = self.peekReg(args.a);
                 const b = self.peekReg(args.b);
@@ -160,7 +162,7 @@ pub const rzvm = struct {
                 continue :vm inst.op;
             },
             else => {
-                log("UNKNOWN OPCODE: {}\n", .{program[self.pc]});
+                log("UNKNOWN OPCODE: {}\n", .{inst});
                 self.pc += 1; // opcode (u8)
                 return FatalErr.InvalidOpcode;
             },
@@ -356,8 +358,13 @@ test "eql, neq" {
         instruction.iABC(.invalid, 0x00, 0x00, 0x00),
         instruction.iABC(.eql, 0x00, 0x01, undefined),
         instruction.iABC(.add, 0x00, 0x01, 0x02),
+        instruction.iABC(.neq, 0x01, 0x01, undefined),
+        instruction.iABC(.add, 0x00, 0x01, 0x03),
+        instruction.iABC(.neq, 0x00, 0x01, undefined),
+        instruction.iABC(.invalid, 0x00, 0x00, 0x00),
         instruction.exit(),
     };
     try vm.run(&bytecode);
     try std.testing.expectEqual(rzval.initInt(r0 + r1).toU64(), vm.registers[2]);
+    try std.testing.expectEqual(rzval.initInt(r0 + r1).toU64(), vm.registers[3]);
 }

@@ -153,12 +153,9 @@ pub fn equality(a: RzValue, b: RzValue, comptime op: enum { eql, neq }) bool {
     // @TODO(Renzix): deal with ptr?
     std.debug.assert(!(a.ptr or b.ptr));
     // @TODO(Renzix): implicit conversion???
-    switch (op) {
-        .eql => {
-            return (a.data == b.data) and (a.type_info == b.type_info);
-        },
-        .neq => {
-            return (a.data == b.data) and (a.type_info == b.type_info);
-        },
-    }
+    const eq = (a.type_info == b.type_info) and (a.data == b.data);
+    return switch (op) {
+        .eql => eq,
+        .neq => !eq,
+    };
 }
