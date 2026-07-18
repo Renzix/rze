@@ -71,28 +71,26 @@ pub const rzvm = struct {
                     const loc3 = args.c;
                     self.loadReg(c, loc3);
                 },
-                // opcode.sub => {
-                //     defer self.pc += 1; // opcode(u8) + loc(u8) + loc(u8) + loc(u8)
-                //     const loc1 = program[self.pc + 1];
-                //     const loc2 = program[self.pc + 2];
-                //     const loc3 = program[self.pc + 3];
-                //     const a = self.peekReg(loc1);
-                //     const b = self.peekReg(loc2);
+                opcode.sub => {
+                    defer self.pc += 1; // opcode(u8) + loc(u8) + loc(u8) + loc(u8)
+                    const args = program[self.pc].args.abc;
+                    const a = self.peekReg(args.a);
+                    const b = self.peekReg(args.b);
 
-                //     const c = rzhelper.binOp(a, b, .sub);
-                //     self.loadReg(c, loc3);
-                // },
-                // opcode.mul => {
-                //     defer self.pc += 1; // opcode(u8) + loc(u8) + loc(u8) + loc(u8)
-                //     const loc1 = program[self.pc + 1];
-                //     const loc2 = program[self.pc + 2];
-                //     const loc3 = program[self.pc + 3];
-                //     const a = self.peekReg(loc1);
-                //     const b = self.peekReg(loc2);
+                    const c = rzhelper.binOp(a, b, .sub);
+                    const loc3 = args.c;
+                    self.loadReg(c, loc3);
+                },
+                opcode.mul => {
+                    defer self.pc += 1; // opcode(u8) + loc(u8) + loc(u8) + loc(u8)
+                    const args = program[self.pc].args.abc;
+                    const a = self.peekReg(args.a);
+                    const b = self.peekReg(args.b);
 
-                //     const c = rzhelper.binOp(a, b, .mul);
-                //     self.loadReg(c, loc3);
-                // },
+                    const c = rzhelper.binOp(a, b, .mul);
+                    const loc3 = args.c;
+                    self.loadReg(c, loc3);
+                },
 
                 else => {
                     log("UNKNOWN OPCODE: {}\n", .{program[self.pc]});
@@ -144,9 +142,9 @@ test "load and mov" {
     var vm = rzvm.init();
     errdefer vm.dump();
     const r0 = 1001;
-    const myconst = runtime.setVariable("Test", rzval.initInt(r0));
+    const vr0 = runtime.setVariable("Test", rzval.initInt(r0));
     const bytecode = [_]instruction{
-        instruction.iABx(.loadg, 0x00, myconst),
+        instruction.iABx(.loadg, 0x00, vr0),
         instruction.iABC(.mov, 0x00, 0x01, 0),
         instruction.iABC(.exit, 0, 0, 0),
     };
@@ -154,84 +152,99 @@ test "load and mov" {
     try std.testing.expectEqual(rzval.initInt(r0).toU64(), vm.registers[1]);
 }
 
-// test "addition" {
-//     log("3. TEST add\n", .{});
-//     var vm = rzvm.init();
-//     errdefer vm.dump();
-//     // defer rzvm.deinit();
-//     const r0 = 1012;
-//     const r1 = -5;
-//     const r2 = -140737488355328;
-//     const r3: f32 = 3.141595653589;
-//     const bytecode =
-//         [_]u8{ @intFromEnum(opcode.load), 0x00 } ++ rzval.initInt(r0).toBytes() ++
-//         [_]u8{ @intFromEnum(opcode.load), 0x01 } ++ rzval.initInt(r1).toBytes() ++
-//         [_]u8{ @intFromEnum(opcode.load), 0x02 } ++ rzval.initInt(r2).toBytes() ++
-//         [_]u8{ @intFromEnum(opcode.load), 0x03 } ++ rzval.initFloat(r3).toBytes() ++
-//         [_]u8{ @intFromEnum(opcode.add), 0x00, 0x01, 0x04 } ++
-//         [_]u8{ @intFromEnum(opcode.add), 0x01, 0x02, 0x05 } ++
-//         [_]u8{ @intFromEnum(opcode.add), 0x03, 0x03, 0x06 } ++
-//         [_]u8{ @intFromEnum(opcode.exit)};
-//     try vm.run(&bytecode);
-//     try std.testing.expectEqual(rzval.initInt(r0 + r1).toU64(), vm.registers[4]);
-//     try std.testing.expectEqual(rzval.initErr(VmErr.overflow).toU64(), vm.registers[5]);
-//     try std.testing.expectEqual(rzval.initFloat(r3 + r3).toU64(), vm.registers[6]);
-// }
+test "addition" {
+    log("3. TEST add\n", .{});
+    var vm = rzvm.init();
+    errdefer vm.dump();
+    // defer rzvm.deinit();
+    const r0 = 1012;
+    const vr0 = runtime.setVariable("Var0", rzval.initInt(r0));
+    const r1 = -5;
+    const vr1 = runtime.setVariable("Var1", rzval.initInt(r1));
+    const r2 = -140737488355328;
+    const vr2 = runtime.setVariable("Var2", rzval.initInt(r2));
+    const r3: f32 = 3.141595653589;
+    const vr3 = runtime.setVariable("Var3", rzval.initFloat(r3));
+    const bytecode = [_]instruction{
+        instruction.iABx(.loadg, 0x00, vr0),
+        instruction.iABx(.loadg, 0x01, vr1),
+        instruction.iABx(.loadg, 0x02, vr2),
+        instruction.iABx(.loadg, 0x03, vr3),
+        instruction.iABC(.add, 0x00, 0x01, 0x04),
+        instruction.iABC(.add, 0x01, 0x02, 0x05),
+        instruction.iABC(.add, 0x03, 0x03, 0x06),
+        instruction.iABC(.exit, 0, 0, 0),
+    };
+    try vm.run(&bytecode);
+    try std.testing.expectEqual(rzval.initInt(r0 + r1).toU64(), vm.registers[4]);
+    try std.testing.expectEqual(rzval.initErr(VmErr.overflow).toU64(), vm.registers[5]);
+    try std.testing.expectEqual(rzval.initFloat(r3 + r3).toU64(), vm.registers[6]);
+}
 
-// test "subtraction" {
-//     log("4. TEST sub\n", .{});
-//     var vm = rzvm.init();
-//     errdefer vm.dump();
-//     // defer rzvm.deinit();
-//     const r0 = 1000;
-//     const r1 = 7;
-//     const r2 = -140737488355328;
-//     const r3: f32 = 2.5;
-//     const bytecode =
-//         [_]u8{ @intFromEnum(opcode.load), 0x00 } ++ rzval.initInt(r0).toBytes() ++
-//         [_]u8{ @intFromEnum(opcode.load), 0x01 } ++ rzval.initInt(r1).toBytes() ++
-//         [_]u8{ @intFromEnum(opcode.load), 0x02 } ++ rzval.initInt(r2).toBytes() ++
-//         [_]u8{ @intFromEnum(opcode.load), 0x03 } ++ rzval.initFloat(r3).toBytes() ++
-//         [_]u8{ @intFromEnum(opcode.sub), 0x00, 0x01, 0x04 } ++
-//         [_]u8{ @intFromEnum(opcode.sub), 0x01, 0x00, 0x05 } ++
-//         [_]u8{ @intFromEnum(opcode.sub), 0x02, 0x01, 0x06 } ++
-//         [_]u8{ @intFromEnum(opcode.sub), 0x00, 0x03, 0x07 } ++
-//         [_]u8{ @intFromEnum(opcode.sub), 0x03, 0x03, 0x08 } ++
-//         [_]u8{ @intFromEnum(opcode.exit)};
-//     try vm.run(&bytecode);
-//     try std.testing.expectEqual(rzval.initInt(r0 - r1).toU64(), vm.registers[4]);
-//     try std.testing.expectEqual(rzval.initInt(r1 - r0).toU64(), vm.registers[5]);
-//     try std.testing.expectEqual(rzval.initErr(VmErr.overflow).toU64(), vm.registers[6]);
-//     try std.testing.expectEqual(rzval.initFloat(r0 - r3).toU64(), vm.registers[7]);
-//     try std.testing.expectEqual(rzval.initFloat(r3 - r3).toU64(), vm.registers[8]);
-// }
+test "subtraction" {
+    log("4. TEST sub\n", .{});
+    var vm = rzvm.init();
+    // defer rzvm.deinit();
+    errdefer vm.dump();
+    const r0 = 1000;
+    const vr0 = runtime.setVariable("Var0", rzval.initInt(r0));
+    const r1 = 7;
+    const vr1 = runtime.setVariable("Var1", rzval.initInt(r1));
+    const r2 = -140737488355328;
+    const vr2 = runtime.setVariable("Var2", rzval.initInt(r2));
+    const r3: f32 = 2.5;
+    const vr3 = runtime.setVariable("Var3", rzval.initFloat(r3));
+    const bytecode = [_]instruction{
+        instruction.iABx(.loadg, 0x00, vr0),
+        instruction.iABx(.loadg, 0x01, vr1),
+        instruction.iABx(.loadg, 0x02, vr2),
+        instruction.iABx(.loadg, 0x03, vr3),
+        instruction.iABC(.sub, 0x00, 0x01, 0x04),
+        instruction.iABC(.sub, 0x01, 0x00, 0x05),
+        instruction.iABC(.sub, 0x02, 0x01, 0x06),
+        instruction.iABC(.sub, 0x00, 0x03, 0x07),
+        instruction.iABC(.sub, 0x03, 0x03, 0x08),
+        instruction.iABC(.exit, 0, 0, 0),
+    };
+    try vm.run(&bytecode);
+    try std.testing.expectEqual(rzval.initInt(r0 - r1).toU64(), vm.registers[4]);
+    try std.testing.expectEqual(rzval.initInt(r1 - r0).toU64(), vm.registers[5]);
+    try std.testing.expectEqual(rzval.initErr(VmErr.overflow).toU64(), vm.registers[6]);
+    try std.testing.expectEqual(rzval.initFloat(r0 - r3).toU64(), vm.registers[7]);
+    try std.testing.expectEqual(rzval.initFloat(r3 - r3).toU64(), vm.registers[8]);
+}
 
-// test "multiplication" {
-//     log("5. TEST mul\n", .{});
-//     var vm = rzvm.init();
-//     // defer rzvm.deinit();
-//     const r0 = 1000;
-//     const r1 = 7;
-//     const r2 = 1 << 24;
-//     const r3: f32 = 2.5;
-//     const bytecode =
-//         [_]u8{ @intFromEnum(opcode.load), 0x00 } ++ rzval.initInt(r0).toBytes() ++
-//         [_]u8{ @intFromEnum(opcode.load), 0x01 } ++ rzval.initInt(r1).toBytes() ++
-//         [_]u8{ @intFromEnum(opcode.load), 0x02 } ++ rzval.initInt(r2).toBytes() ++
-//         [_]u8{ @intFromEnum(opcode.load), 0x03 } ++ rzval.initFloat(r3).toBytes() ++
-//         [_]u8{ @intFromEnum(opcode.mul), 0x00, 0x01, 0x04 } ++
-//         [_]u8{ @intFromEnum(opcode.mul), 0x02, 0x02, 0x05 } ++
-//         [_]u8{ @intFromEnum(opcode.mul), 0x00, 0x03, 0x06 } ++
-//         [_]u8{ @intFromEnum(opcode.mul), 0x01, 0x03, 0x07 } ++
-//         [_]u8{ @intFromEnum(opcode.mul), 0x03, 0x03, 0x08 } ++
-//         [_]u8{ @intFromEnum(opcode.exit)};
-//     try vm.run(&bytecode);
-//     try std.testing.expectEqual(rzval.initInt(r0 * r1).toU64(), vm.registers[4]);
-//     try std.testing.expectEqual(rzval.initErr(VmErr.overflow).toU64(), vm.registers[5]);
-//     try std.testing.expectEqual(rzval.initFloat(r0 * r3).toU64(), vm.registers[6]);
-//     try std.testing.expectEqual(rzval.initFloat(r1 * r3).toU64(), vm.registers[7]);
-//     try std.testing.expectEqual(rzval.initFloat(r3 * r3).toU64(), vm.registers[8]);
-// }
+test "multiplication" {
+    log("5. TEST mul\n", .{});
+    var vm = rzvm.init();
+    // defer rzvm.deinit();
+    const r0 = 1000;
+    const vr0 = runtime.setVariable("Var0", rzval.initInt(r0));
+    const r1 = 7;
+    const vr1 = runtime.setVariable("Var1", rzval.initInt(r1));
+    const r2 = 1 << 24;
+    const vr2 = runtime.setVariable("Var2", rzval.initInt(r2));
+    const r3: f32 = 2.5;
+    const vr3 = runtime.setVariable("Var3", rzval.initFloat(r3));
+    const bytecode = [_]instruction{
+        instruction.iABx(.loadg, 0x00, vr0),
+        instruction.iABx(.loadg, 0x01, vr1),
+        instruction.iABx(.loadg, 0x02, vr2),
+        instruction.iABx(.loadg, 0x03, vr3),
+        instruction.iABC(.mul, 0x00, 0x01, 0x04),
+        instruction.iABC(.mul, 0x02, 0x02, 0x05),
+        instruction.iABC(.mul, 0x00, 0x03, 0x06),
+        instruction.iABC(.mul, 0x01, 0x03, 0x07),
+        instruction.iABC(.mul, 0x03, 0x03, 0x08),
+        instruction.iABC(.exit, 0, 0, 0),
+    };
+    try vm.run(&bytecode);
+    try std.testing.expectEqual(rzval.initInt(r0 * r1).toU64(), vm.registers[4]);
+    try std.testing.expectEqual(rzval.initErr(VmErr.overflow).toU64(), vm.registers[5]);
+    try std.testing.expectEqual(rzval.initFloat(r0 * r3).toU64(), vm.registers[6]);
+    try std.testing.expectEqual(rzval.initFloat(r1 * r3).toU64(), vm.registers[7]);
+    try std.testing.expectEqual(rzval.initFloat(r3 * r3).toU64(), vm.registers[8]);
+}
 
 // test "jmp" {
 //     log("6. TEST jmp\n", .{});
