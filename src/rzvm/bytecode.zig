@@ -20,12 +20,19 @@ pub const instruction = packed struct(u32) {
             a: u8,
             bx: u16,
         },
+        asbx: packed struct(u24) {
+            a: u8,
+            sbx: i16,
+        },
     },
     pub fn iABC(op: opcode, a: u8, b: u8, c: u8) instruction {
         return .{ .op = op, .args = .{ .abc = .{ .a = a, .b = b, .c = c } } };
     }
     pub fn iABx(op: opcode, a: u8, bx: u16) instruction {
         return .{ .op = op, .args = .{ .abx = .{ .a = a, .bx = bx } } };
+    }
+    pub fn iAsBx(op: opcode, a: u8, sbx: i16) instruction {
+        return .{ .op = op, .args = .{ .abx = .{ .a = a, .sbx = sbx } } };
     }
     pub fn exit() instruction {
         return .{ .op = .exit, .args = .{ .abc = .{ .a = 0, .b = 0, .c = 0 } } };
