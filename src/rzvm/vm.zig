@@ -39,7 +39,6 @@ pub const rzvm = struct {
                     break;
                 },
                 opcode.loadg => {
-                    defer self.pc += 1;
                     const args = program[self.pc].args.abx;
                     const loc = args.a;
                     const index = args.bx;
@@ -47,7 +46,6 @@ pub const rzvm = struct {
                     self.loadReg(val, loc);
                 },
                 opcode.loadb => {
-                    defer self.pc += 1; // opcode(u8) + loc(u8) + value(u16)
                     const args = program[self.pc].args.abx;
                     const loc = args.a;
                     const data = args.bx;
@@ -55,14 +53,12 @@ pub const rzvm = struct {
                     self.loadReg(val, loc);
                 },
                 opcode.mov => {
-                    defer self.pc += 1; // opcode(u8) + loc1(u8) + loc2(u8)
                     const args = program[self.pc].args.abc;
                     const loc1 = args.a;
                     const loc2 = args.b;
                     self.registers[loc2] = self.registers[loc1];
                 },
                 opcode.add => {
-                    defer self.pc += 1; // opcode(u8) + loc(u8) + loc(u8) + loc(u8)
                     const args = program[self.pc].args.abc;
                     const a = self.peekReg(args.a);
                     const b = self.peekReg(args.b);
@@ -72,7 +68,6 @@ pub const rzvm = struct {
                     self.loadReg(c, loc3);
                 },
                 opcode.sub => {
-                    defer self.pc += 1; // opcode(u8) + loc(u8) + loc(u8) + loc(u8)
                     const args = program[self.pc].args.abc;
                     const a = self.peekReg(args.a);
                     const b = self.peekReg(args.b);
@@ -82,7 +77,6 @@ pub const rzvm = struct {
                     self.loadReg(c, loc3);
                 },
                 opcode.mul => {
-                    defer self.pc += 1; // opcode(u8) + loc(u8) + loc(u8) + loc(u8)
                     const args = program[self.pc].args.abc;
                     const a = self.peekReg(args.a);
                     const b = self.peekReg(args.b);
@@ -98,6 +92,7 @@ pub const rzvm = struct {
                     return FatalErr.InvalidOpcode;
                 },
             }
+            self.pc += 1;
         }
     }
     pub fn loadReg(self: *rzvm, val: rzval, loc: u8) void {
@@ -126,7 +121,6 @@ pub const rzvm = struct {
 };
 
 test "Exit" {
-    log("1. TEST exit\n", .{});
     var vm = rzvm.init();
     errdefer vm.dump();
     // defer rzvm.deinit();
@@ -138,8 +132,8 @@ test "Exit" {
 }
 
 test "load and mov" {
-    log("2. TEST mov\n", .{});
     var vm = rzvm.init();
+    // defer rzvm.deinit();
     errdefer vm.dump();
     const r0 = 1001;
     const vr0 = runtime.setVariable("Test", rzval.initInt(r0));
@@ -153,7 +147,6 @@ test "load and mov" {
 }
 
 test "addition" {
-    log("3. TEST add\n", .{});
     var vm = rzvm.init();
     errdefer vm.dump();
     // defer rzvm.deinit();
@@ -182,7 +175,6 @@ test "addition" {
 }
 
 test "subtraction" {
-    log("4. TEST sub\n", .{});
     var vm = rzvm.init();
     // defer rzvm.deinit();
     errdefer vm.dump();
@@ -215,7 +207,6 @@ test "subtraction" {
 }
 
 test "multiplication" {
-    log("5. TEST mul\n", .{});
     var vm = rzvm.init();
     // defer rzvm.deinit();
     const r0 = 1000;
@@ -247,7 +238,6 @@ test "multiplication" {
 }
 
 // test "jmp" {
-//     log("6. TEST jmp\n", .{});
 //     var vm = rzvm.init();
 //     // defer rzvm.deinit();
 //     const r0 = 100;
