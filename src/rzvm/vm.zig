@@ -7,7 +7,7 @@ const typeinfo = @import("rzvalue.zig").TypeInfo;
 
 const opcode = @import("bytecode.zig").opcode;
 const instruction = @import("bytecode.zig").instruction;
-const VmErr = @import("rzvalue.zig").VmErr;
+const RzErr = @import("rzvalue.zig").RzErr;
 
 const runtime = @import("runtime.zig").runtime;
 
@@ -141,18 +141,20 @@ pub const rzvm = struct {
                 self.pc += 1;
                 continue :vm inst.op;
             },
-            inline .eql, .neq => |op| {
+            inline .ltn, .gtn, .gtne,
+                   .ltne, .eql, .neq => |op| {
                 const args = inst.args.abc;
                 const a = self.peekReg(args.a);
                 const b = self.peekReg(args.b);
 
-                const eqlop = switch (op) {
-                    .eql => .eql,
-                    .neq => .neq,
+                // compile time func call
+                const myop = switch (op) {
+                    .ltn => .lessthan, .gtn => .greaterthan,
+                    .gtne => .greaterthaneql, .ltne => .lessthaneql,
+                    .eql => .equal, .neq => .notequal,
                     else => unreachable,
                 };
-                const ok = rzhelper.equality(a, b, eqlop);
-
+                const ok = rzhelper.compare(a, b, myop);
                 if (ok) {
                     self.pc += 1;
                 }
@@ -243,7 +245,7 @@ test "addition" {
     };
     try vm.run(&bytecode);
     try std.testing.expectEqual(rzval.initInt(r0 + r1).toU64(), vm.registers[4]);
-    try std.testing.expectEqual(rzval.initErr(VmErr.overflow).toU64(), vm.registers[5]);
+    try std.testing.expectEqual(rzval.initErr(RzErr.overflow).toU64(), vm.registers[5]);
     try std.testing.expectEqual(rzval.initFloat(r3 + r3).toU64(), vm.registers[6]);
 }
 
@@ -274,7 +276,7 @@ test "subtraction" {
     try vm.run(&bytecode);
     try std.testing.expectEqual(rzval.initInt(r0 - r1).toU64(), vm.registers[4]);
     try std.testing.expectEqual(rzval.initInt(r1 - r0).toU64(), vm.registers[5]);
-    try std.testing.expectEqual(rzval.initErr(VmErr.overflow).toU64(), vm.registers[6]);
+    try std.testing.expectEqual(rzval.initErr(RzErr.overflow).toU64(), vm.registers[6]);
     try std.testing.expectEqual(rzval.initFloat(r0 - r3).toU64(), vm.registers[7]);
     try std.testing.expectEqual(rzval.initFloat(r3 - r3).toU64(), vm.registers[8]);
 }
@@ -305,7 +307,7 @@ test "multiplication" {
     };
     try vm.run(&bytecode);
     try std.testing.expectEqual(rzval.initInt(r0 * r1).toU64(), vm.registers[4]);
-    try std.testing.expectEqual(rzval.initErr(VmErr.overflow).toU64(), vm.registers[5]);
+    try std.testing.expectEqual(rzval.initErr(RzErr.overflow).toU64(), vm.registers[5]);
     try std.testing.expectEqual(rzval.initFloat(r0 * r3).toU64(), vm.registers[6]);
     try std.testing.expectEqual(rzval.initFloat(r1 * r3).toU64(), vm.registers[7]);
     try std.testing.expectEqual(rzval.initFloat(r3 * r3).toU64(), vm.registers[8]);
@@ -343,7 +345,7 @@ test "jmp, jz, jnz" {
     try std.testing.expectEqual(rzval.initInt(0).toU64(), vm.registers[6]);
 }
 
-test "eql, neq" {
+test "eql, neq " {
     var vm = rzvm.init();
     // defer rzvm.deinit();
     errdefer vm.dump();
@@ -368,3 +370,5 @@ test "eql, neq" {
     try std.testing.expectEqual(rzval.initInt(r0 + r1).toU64(), vm.registers[2]);
     try std.testing.expectEqual(rzval.initInt(r0 + r1).toU64(), vm.registers[3]);
 }
+
+// @TODO(Renzix): Write test for ltn gtn ltne gtne =)

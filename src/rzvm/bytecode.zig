@@ -53,15 +53,16 @@ pub const opcode = enum(u8) {
     mul  = 8, // opcode(u8) + rega(u8) + regb(u8) + regc(u8)
     div  = 9, // unimplemented
     // comparison
-    eql = 10, // equal
-    neq = 11, // not equal
-    ltn = 12, // less than
-    gtn = 13, // greater than
-    not = 14, // not
+    eql = 10, // opcode(u8) + rega(u8) + regb(u8)
+    neq = 11, // opcode(u8) + rega(u8) + regb(u8)
+    ltn = 12, // opcode(u8) + rega(u8) + regb(u8)
+    gtn = 13, // opcode(u8) + rega(u8) + regb(u8)
+    ltne = 14, // opcode(u8) + rega(u8) + regb(u8)
+    gtne = 15, // opcode(u8) + rega(u8) + regb(u8)
     // control flow
-    jmp = 15, // opcode(u8) + undefined(u8) + amount(u16)
-    jz = 16, // jump if not 0
-    jnz = 17, // jump if 0
-    call = 18, // jump to function
-    ret = 19, // returns from function
+    jmp = 16, // opcode(u8) + undefined(u8) + amount(u16)
+    jz = 17, // jump if not 0
+    jnz = 18, // jump if 0
+    call = 19, // jump to function
+    ret = 20, // returns from function
 };

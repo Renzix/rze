@@ -23,7 +23,7 @@ pub const GcBit = enum(u2) {
     static = 0b11,
 };
 
-pub const VmErr = enum(u48) {
+pub const RzErr = enum(u48) {
     unknown = 0,
     overflow = 1,
     type_mismatch = 2,
@@ -72,9 +72,21 @@ pub const RzValue = packed struct(u64) {
         return init(TypeInfo.float, false, false, false, GcBit.white, raw);
     }
 
-    pub fn initErr(err: VmErr) RzValue {
+    pub fn initErr(err: RzErr) RzValue {
         const raw: u48 = @intFromEnum(err);
         return init(TypeInfo.err, false, false, false, GcBit.white, raw);
+    }
+
+    pub inline fn asI48(self: RzValue) i48 {
+        return switch (self.type_info) {
+            TypeInfo.int => @bitCast(self.data),
+            TypeInfo.float => blk: {
+                // @TODO(Renzix): This is probably stupid and not working properly
+                const f: f32 = @bitCast(@as(u32, @truncate(self.data)));
+                break :blk @intFromFloat(f);
+            },
+            else => @panic("Turning type into int is not defined yet"),
+        };
     }
 
     pub inline fn asF32(self: RzValue) f32 {
@@ -98,7 +110,7 @@ pub fn binOp(a: RzValue, b: RzValue, comptime op: enum { add, sub, mul }) RzValu
         if (a.type_info == .err) break :blk a;
         if (b.type_info == .err) break :blk b;
         if (a.nullable or b.nullable) {
-            break :blk RzValue.initErr(VmErr.null_operand);
+            break :blk RzValue.initErr(RzErr.null_operand);
         }
         break :blk switch (a.type_info) {
             .int => switch (b.type_info) {
@@ -114,7 +126,7 @@ pub fn binOp(a: RzValue, b: RzValue, comptime op: enum { add, sub, mul }) RzValu
                     if (overflow == 0)
                         break :blk RzValue.initInt(val)
                     else
-                        break :blk RzValue.initErr(VmErr.overflow);
+                        break :blk RzValue.initErr(RzErr.overflow);
                 },
                 .float => {
                     break :blk switch (op) {
@@ -123,7 +135,7 @@ pub fn binOp(a: RzValue, b: RzValue, comptime op: enum { add, sub, mul }) RzValu
                         .mul => RzValue.initFloat(a.asF32()*b.asF32()),
                     };
                 },
-                else => RzValue.initErr(VmErr.type_mismatch),
+                else => RzValue.initErr(RzErr.type_mismatch),
             },
             .float => switch (b.type_info) {
                 .int => {
@@ -140,22 +152,70 @@ pub fn binOp(a: RzValue, b: RzValue, comptime op: enum { add, sub, mul }) RzValu
                         .mul => RzValue.initFloat(a.asF32()*b.asF32()),
                     };
                 },
-                else => RzValue.initErr(VmErr.type_mismatch),
+                else => RzValue.initErr(RzErr.type_mismatch),
             },
-            else => RzValue.initErr(VmErr.type_mismatch),
+            else => RzValue.initErr(RzErr.type_mismatch),
         };
     };
 }
 
-pub fn equality(a: RzValue, b: RzValue, comptime op: enum { eql, neq }) bool {
-    if (a.nullable and b.nullable) return true;
-    if (a.nullable or b.nullable) return false;
-    // @TODO(Renzix): deal with ptr?
-    std.debug.assert(!(a.ptr or b.ptr));
-    // @TODO(Renzix): implicit conversion???
-    const eq = (a.type_info == b.type_info) and (a.data == b.data);
-    return switch (op) {
-        .eql => eq,
-        .neq => !eq,
+pub fn compare(a: RzValue, b: RzValue,
+               comptime op: enum { lessthan, greaterthan, lessthaneql,
+                                  greaterthaneql, equal, notequal }) bool {
+    return blk: {
+        if (a.type_info == .err) break :blk false;
+        if (b.type_info == .err) break :blk false;
+        if (a.nullable or b.nullable) {
+            break :blk false;
+        }
+        break :blk switch (a.type_info) {
+            .int => switch (b.type_info) {
+                .int => {
+                    switch (op) {
+                        .lessthan => break :blk a.asI48() < b.asI48(),
+                        .greaterthan => break :blk a.asI48() > b.asI48(),
+                        .lessthaneql => break :blk a.asI48() <= b.asI48(),
+                        .greaterthaneql => break :blk a.asI48() >= b.asI48(),
+                        .equal => break :blk a.asI48() == b.asI48(),
+                        .notequal => break :blk a.asI48() != b.asI48(),
+                    }
+                },
+                .float => {
+                    break :blk switch (op) {
+                        .lessthan => break :blk a.asF32() < b.asF32(),
+                        .greaterthan => break :blk a.asF32() > b.asF32(),
+                        .lessthaneql => break :blk a.asF32() <= b.asF32(),
+                        .greaterthaneql => break :blk a.asF32() >= b.asF32(),
+                        .equal => break :blk a.asF32() == b.asF32(),
+                        .notequal => break :blk a.asF32() != b.asF32(),
+                    };
+                },
+                else => false,
+            },
+            .float => switch (b.type_info) {
+                .int => {
+                    break :blk switch (op) {
+                        .lessthan => break :blk a.asF32() < b.asF32(),
+                        .greaterthan => break :blk a.asF32() > b.asF32(),
+                        .lessthaneql => break :blk a.asF32() <= b.asF32(),
+                        .greaterthaneql => break :blk a.asF32() >= b.asF32(),
+                        .equal => break :blk a.asF32() == b.asF32(),
+                        .notequal => break :blk a.asF32() != b.asF32(),
+                    };
+                },
+                .float => {
+                    break :blk switch (op) {
+                        .lessthan => break :blk a.asF32() < b.asF32(),
+                        .greaterthan => break :blk a.asF32() > b.asF32(),
+                        .lessthaneql => break :blk a.asF32() <= b.asF32(),
+                        .greaterthaneql => break :blk a.asF32() >= b.asF32(),
+                        .equal => break :blk a.asF32() == b.asF32(),
+                        .notequal => break :blk a.asF32() != b.asF32(),
+                    };
+                },
+                else => false,
+            },
+            else => false,
+        };
     };
 }
