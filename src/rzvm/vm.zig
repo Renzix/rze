@@ -32,67 +32,89 @@ pub const rzvm = struct {
     }
     pub fn run(self: *rzvm, program: []const instruction) FatalErr!void {
         self.pc = 0;
-        while (true) {
-            const code: opcode = program[self.pc].op;
-            switch (code) {
-                opcode.exit => {
-                    break;
-                },
-                opcode.loadg => {
-                    const args = program[self.pc].args.abx;
-                    const loc = args.a;
-                    const index = args.bx;
-                    const val = runtime.global[index];
-                    self.loadReg(val, loc);
-                },
-                opcode.loadb => {
-                    const args = program[self.pc].args.abx;
-                    const loc = args.a;
-                    const data = args.bx;
-                    const val = rzval.initInt(@as(i48, data));
-                    self.loadReg(val, loc);
-                },
-                opcode.mov => {
-                    const args = program[self.pc].args.abc;
-                    const loc1 = args.a;
-                    const loc2 = args.b;
-                    self.registers[loc2] = self.registers[loc1];
-                },
-                opcode.add => {
-                    const args = program[self.pc].args.abc;
-                    const a = self.peekReg(args.a);
-                    const b = self.peekReg(args.b);
+        var inst = program[0];
+        self.pc = 1;
+        vm: switch (inst.op) {
+            opcode.exit => {
+                return;
+            },
+            opcode.loadg => {
+                const args = inst.args.abx;
+                const loc = args.a;
+                const index = args.bx;
+                const val = runtime.global[index];
+                self.loadReg(val, loc);
 
-                    const c = rzhelper.binOp(a, b, .add);
-                    const loc3 = args.c;
-                    self.loadReg(c, loc3);
-                },
-                opcode.sub => {
-                    const args = program[self.pc].args.abc;
-                    const a = self.peekReg(args.a);
-                    const b = self.peekReg(args.b);
+                inst = program[self.pc];
+                self.pc += 1;
+                continue :vm inst.op;
+            },
+            opcode.loadb => {
+                const args = inst.args.abx;
+                const loc = args.a;
+                const data = args.bx;
+                const val = rzval.initInt(@as(i48, data));
+                self.loadReg(val, loc);
 
-                    const c = rzhelper.binOp(a, b, .sub);
-                    const loc3 = args.c;
-                    self.loadReg(c, loc3);
-                },
-                opcode.mul => {
-                    const args = program[self.pc].args.abc;
-                    const a = self.peekReg(args.a);
-                    const b = self.peekReg(args.b);
+                inst = program[self.pc];
+                self.pc += 1;
+                continue :vm inst.op;
+            },
+            opcode.mov => {
+                const args = inst.args.abc;
+                const loc1 = args.a;
+                const loc2 = args.b;
+                self.registers[loc2] = self.registers[loc1];
 
-                    const c = rzhelper.binOp(a, b, .mul);
-                    const loc3 = args.c;
-                    self.loadReg(c, loc3);
-                },
+                inst = program[self.pc];
+                self.pc += 1;
+                continue :vm inst.op;
+            },
+            opcode.add => {
+                const args = inst.args.abc;
+                const a = self.peekReg(args.a);
+                const b = self.peekReg(args.b);
 
-                else => {
-                    log("UNKNOWN OPCODE: {}\n", .{program[self.pc]});
-                    self.pc += 1; // opcode (u8)
-                    return FatalErr.InvalidOpcode;
-                },
-            }
-            self.pc += 1;
+                const c = rzhelper.binOp(a, b, .add);
+                const loc3 = args.c;
+                self.loadReg(c, loc3);
+
+                inst = program[self.pc];
+                self.pc += 1;
+                continue :vm inst.op;
+            },
+            opcode.sub => {
+                const args = inst.args.abc;
+                const a = self.peekReg(args.a);
+                const b = self.peekReg(args.b);
+
+                const c = rzhelper.binOp(a, b, .sub);
+                const loc3 = args.c;
+                self.loadReg(c, loc3);
+
+                inst = program[self.pc];
+                self.pc += 1;
+                continue :vm inst.op;
+            },
+            opcode.mul => {
+                const args = inst.args.abc;
+                const a = self.peekReg(args.a);
+                const b = self.peekReg(args.b);
+
+                const c = rzhelper.binOp(a, b, .mul);
+                const loc3 = args.c;
+                self.loadReg(c, loc3);
+
+                inst = program[self.pc];
+                self.pc += 1;
+                continue :vm inst.op;
+            },
+
+            else => {
+                log("UNKNOWN OPCODE: {}\n", .{program[self.pc]});
+                self.pc += 1; // opcode (u8)
+                return FatalErr.InvalidOpcode;
+            },
         }
     }
     pub fn loadReg(self: *rzvm, val: rzval, loc: u8) void {
@@ -128,7 +150,7 @@ test "Exit" {
         instruction.iABC(.exit, 0, 0, 0),
     };
     try vm.run(&bytecode);
-    std.debug.assert(vm.pc == 0);
+    std.debug.assert(vm.pc == 1);
 }
 
 test "load and mov" {
