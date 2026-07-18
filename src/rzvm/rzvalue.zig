@@ -146,3 +146,19 @@ pub fn binOp(a: RzValue, b: RzValue, comptime op: enum { add, sub, mul }) RzValu
         };
     };
 }
+
+pub fn equality(a: RzValue, b: RzValue, comptime op: enum { eql, neq }) bool {
+    if (a.nullable and b.nullable) return true;
+    if (a.nullable or b.nullable) return false;
+    // @TODO(Renzix): deal with ptr?
+    std.debug.assert(!(a.ptr or b.ptr));
+    // @TODO(Renzix): implicit conversion???
+    switch (op) {
+        .eql => {
+            return (a.data == b.data) and (a.type_info == b.type_info);
+        },
+        .neq => {
+            return (a.data == b.data) and (a.type_info == b.type_info);
+        },
+    }
+}

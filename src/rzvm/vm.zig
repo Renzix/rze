@@ -37,10 +37,10 @@ pub const rzvm = struct {
         var inst = program[0];
         self.pc = 1;
         vm: switch (inst.op) {
-            opcode.exit => {
+            .exit => {
                 return;
             },
-            opcode.loadg => {
+            .loadg => {
                 const args = inst.args.abx;
                 const loc = args.a;
                 const index = args.bx;
@@ -51,7 +51,7 @@ pub const rzvm = struct {
                 self.pc += 1;
                 continue :vm inst.op;
             },
-            opcode.loadb => {
+            .loadb => {
                 const args = inst.args.abx;
                 const loc = args.a;
                 const data = args.bx;
@@ -62,7 +62,7 @@ pub const rzvm = struct {
                 self.pc += 1;
                 continue :vm inst.op;
             },
-            opcode.mov => {
+            .mov => {
                 const args = inst.args.abc;
                 const loc1 = args.a;
                 const loc2 = args.b;
@@ -72,7 +72,7 @@ pub const rzvm = struct {
                 self.pc += 1;
                 continue :vm inst.op;
             },
-            opcode.add => {
+            .add => {
                 const args = inst.args.abc;
                 const a = self.peekReg(args.a);
                 const b = self.peekReg(args.b);
@@ -85,7 +85,7 @@ pub const rzvm = struct {
                 self.pc += 1;
                 continue :vm inst.op;
             },
-            opcode.sub => {
+            .sub => {
                 const args = inst.args.abc;
                 const a = self.peekReg(args.a);
                 const b = self.peekReg(args.b);
@@ -98,7 +98,7 @@ pub const rzvm = struct {
                 self.pc += 1;
                 continue :vm inst.op;
             },
-            opcode.mul => {
+            .mul => {
                 const args = inst.args.abc;
                 const a = self.peekReg(args.a);
                 const b = self.peekReg(args.b);
@@ -111,7 +111,7 @@ pub const rzvm = struct {
                 self.pc += 1;
                 continue :vm inst.op;
             },
-            opcode.jmp => {
+            .jmp => {
                 const args = inst.args.asbx;
                 self.pc = @intCast(@as(i32, self.pc) + args.sbx);
 
@@ -119,7 +119,7 @@ pub const rzvm = struct {
                 self.pc += 1;
                 continue :vm inst.op;
             },
-            opcode.jz => {
+            .jz => {
                 const args = inst.args.asbx;
                 const a = self.peekReg(args.a);
                 if ((a.nullable==true) or (a.data==0))
@@ -129,11 +129,31 @@ pub const rzvm = struct {
                 self.pc += 1;
                 continue :vm inst.op;
             },
-            opcode.jnz => {
+            .jnz => {
                 const args = inst.args.asbx;
                 const a = self.peekReg(args.a);
                 if (!((a.nullable==true) or (a.data==0)))
                     self.pc = @intCast(@as(i32, self.pc) + args.sbx);
+
+                inst = program[self.pc];
+                self.pc += 1;
+                continue :vm inst.op;
+            },
+            inline .eql, .neq  => |op| {
+                const args = inst.args.abc;
+                const a = self.peekReg(args.a);
+                const b = self.peekReg(args.b);
+
+                const eqlop = switch (op) {
+                    .eql => .eql,
+                    .neq => .neq,
+                    else => unreachable,
+                };
+                const ok = rzhelper.equality(a, b, eqlop);
+
+                if (ok) {
+                    self.pc += 1;
+                }
 
                 inst = program[self.pc];
                 self.pc += 1;
@@ -319,4 +339,25 @@ test "jmp, jz, jnz" {
     try std.testing.expectEqual(rzval.initInt(r0 + r1).toU64(), vm.registers[4]);
     try std.testing.expectEqual(rzval.initInt(r0 + r1).toU64(), vm.registers[5]);
     try std.testing.expectEqual(rzval.initInt(0).toU64(), vm.registers[6]);
+}
+
+test "eql, neq" {
+    var vm = rzvm.init();
+    // defer rzvm.deinit();
+    errdefer vm.dump();
+    const r0 = 100;
+    const vr0 = runtime.setVariable("Var0", rzval.initInt(r0));
+    const r1 = 200;
+    const vr1 = runtime.setVariable("Var1", rzval.initInt(r1));
+    const bytecode = [_]instruction{
+        instruction.iABx(.loadg, 0x00, vr0),
+        instruction.iABx(.loadg, 0x01, vr1),
+        instruction.iABC(.eql, 0x01, 0x01, undefined),
+        instruction.iABC(.invalid, 0x00, 0x00, 0x00),
+        instruction.iABC(.eql, 0x00, 0x01, undefined),
+        instruction.iABC(.add, 0x00, 0x01, 0x02),
+        instruction.exit(),
+    };
+    try vm.run(&bytecode);
+    try std.testing.expectEqual(rzval.initInt(r0 + r1).toU64(), vm.registers[2]);
 }
