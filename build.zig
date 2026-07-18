@@ -4,6 +4,7 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    // @TODO(Renzix): make src/rzvm/root.zig and src/rzx/root.zig and src/rzl/root.zig
     const mod = b.addModule("rze", .{
         .root_source_file = b.path("src/root.zig"),
         .target = target,

@@ -25,6 +25,7 @@ pub const VmErr = enum(u48) {
     overflow = 1,
     type_mismatch = 2,
     null_operand = 3,
+    name_not_found = 4,
 };
 
 // packed 64 bit struct for "common types"
@@ -88,6 +89,7 @@ pub const RzValue = packed struct(u64) {
     }
 };
 
+// @TODO(Renzix): Entirely seperate helper function for div?
 pub fn binOp(a: RzValue, b: RzValue, comptime op: enum { add, sub, mul }) RzValue {
     return blk: {
         if (a.type_info == .err) break :blk a;
@@ -100,11 +102,11 @@ pub fn binOp(a: RzValue, b: RzValue, comptime op: enum { add, sub, mul }) RzValu
                 .int => {
                     const val, const overflow = switch (op) {
                         .add => @addWithOverflow(@as(i48, @bitCast(a.data)),
-                                                @as(i48, @bitCast(b.data))),
+                                                 @as(i48, @bitCast(b.data))),
                         .sub => @subWithOverflow(@as(i48, @bitCast(a.data)),
-                                                @as(i48, @bitCast(b.data))),
+                                                 @as(i48, @bitCast(b.data))),
                         .mul => @mulWithOverflow(@as(i48, @bitCast(a.data)),
-                                                @as(i48, @bitCast(b.data))),
+                                                 @as(i48, @bitCast(b.data))),
                     };
                     if (overflow == 0)
                         break :blk RzValue.initInt(val)

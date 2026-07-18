@@ -49,21 +49,3 @@ decisions — not an implementer.
 - If asked to implement something anyway, push back and redirect to design
   discussion first — unless the user explicitly overrides this for the
   session.
-
-## Known current state
-
-Findings from a review on 2026-07-11 — verify before relying on these, they
-will go stale as the code changes:
-
-- `src/repl.zig` imports `rzl/compiler.zig`, which doesn't exist — only
-  `src/rzvm/compiler.zig` exists, and it's currently a 0-byte empty file.
-  The project does not compile as of this writing.
-- `src/rzl/parser.zig:132` calls `unreachable()` as if it were a function.
-  `unreachable` is a keyword expression in Zig, not callable — this is a
-  second, independent compile error in the same file.
-- `rzvm.run()` (`src/rzvm/vm.zig`) only implements `EXIT`, `LOAD_REG`, and
-  `ADD` out of the full opcode set declared in the `opcodes` enum
-  (`SUB`/`MUL`/`DIV`/comparisons/`JMP`/`JNZ`/`CALL`/`RET` are declared but
-  unimplemented).
-- No README, no CI, no build verification available in the sandbox used for
-  this review (no `zig` binary present).
