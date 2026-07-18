@@ -1,9 +1,12 @@
 const std = @import("std");
 
-const l = @import("rzl/lexer.zig");
-const p = @import("rzl/parser.zig");
+// const l = @import("rzl/lexer.zig");
+// const p = @import("rzl/parser.zig");
 // const c = @import("rzl/compiler.zig");
-const rzx = @import("rzx/parser.zig");
+const p = @import("rzx/parser.zig");
+const c = @import("rzx/compiler.zig");
+
+const v = @import("rzvm/vm.zig");
 
 // In src/repl.zig
 pub const repl = struct {
@@ -54,9 +57,12 @@ pub const repl = struct {
         @memcpy(self.code[0..line.len], line);
     }
     pub fn eval(self: *repl) void {
-        var rzxparser = rzx.Parser.init();
-        const parser = rzxparser.run(self.code[0..self.code_len]);
-        if (parser==null) { @panic("null program"); }
+        var parser = p.Parser.init();
+        const ast = parser.run(self.code[0..self.code_len]).?;
+        // if (ast==null) { @panic("null program"); }
+        var compiler = c.Compiler.init().?;
+        const bytecode = compiler.run(ast);
+        _ = bytecode;
         // if (ret==null) @panic("NULL");
         // var lexer = l.Lexer.init();
         // const token_list = lexer.run(self.code[0..self.code_len]) catch unreachable;
@@ -69,7 +75,7 @@ pub const repl = struct {
         // var compiler = c.Compiler.init();
         // _ = compiler.run(ast) catch unreachable;
 
-        // var vm = v.Rzvm.init();
-        // const ret = vm.run(bytecode);
+        _ = v.rzvm.init();
+        // const ret = vm.run();
     }
 };

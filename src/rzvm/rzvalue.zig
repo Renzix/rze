@@ -10,31 +10,31 @@ pub const TypeInfo = enum(u8) {
     map = 0b1000,
     struct_ = 0b1001,
     native_function = 0b1010,
+    err = 0b1011,
 };
 
 pub const GcBit = enum(u2) {
-    White = 0b00,
-    Grey = 0b01,
-    Black = 0b10,
-    Static = 0b11,
+    white = 0b00,
+    grey = 0b01,
+    black = 0b10,
+    static = 0b11,
 };
 
-pub const vmerr = enum(u48) {
-    UNKNOWN = 0,
-    ADD_OVERFLOW = 1,
-    ADD_ERROR = 2,
-    ADD_NULL = 3,
+pub const VmErr = enum(u48) {
+    unknown = 0,
+    add_overflow = 1,
+    add_error = 2,
+    add_null = 3,
 };
 
 // packed 64 bit struct for "common types"
 pub const RzValue = packed struct(u64) {
     type_info: TypeInfo, // u8
-    ptr: u1,
-    mutable: u1,
-    nullable: u1,
-    err: u1,
+    ptr: bool,
+    mutable: bool,
+    nullable: bool,
     gc: GcBit, // u2
-    reserved: u2,
+    reserved: u3,
     data: u48,
 
     pub inline fn toBytes(self: RzValue) [8]u8 {
@@ -45,13 +45,12 @@ pub const RzValue = packed struct(u64) {
         return @bitCast(self);
     }
 
-    pub fn init(type_info: TypeInfo, ptr: u1, mutable: u1, nullable: u1, err: u1, gc: GcBit, val: u48) RzValue {
+    pub fn init(type_info: TypeInfo, ptr: bool, mutable: bool, nullable: bool, gc: GcBit, val: u48) RzValue {
         return .{
             .type_info = type_info,
             .ptr = ptr,
             .mutable = mutable,
             .nullable = nullable,
-            .err = err,
             .gc = gc,
             .reserved = undefined,
             .data = val,
@@ -60,26 +59,31 @@ pub const RzValue = packed struct(u64) {
 
     pub fn initInt(val: i48) RzValue {
         const raw: u48 = @bitCast(val);
-        return init(TypeInfo.int, 0, 0, 0, 0, GcBit.White, raw);
+        return init(TypeInfo.int, false, false, false, GcBit.white, raw);
     }
 
     // @TODO(Renzix): Switch to f64 and cut off the percision maybe?
     pub fn initFloat(val: f32) RzValue {
         const raw: u32 = @bitCast(val);
-        return init(TypeInfo.float, 0, 0, 0, 0, GcBit.White, raw);
+        return init(TypeInfo.float, false, false, false, GcBit.white, raw);
     }
 
-    pub inline fn convertIntToFloat(self: *RzValue) void {
-        const floatval: f32 = @floatFromInt(self.data);
-        const temp: u32 = @bitCast(floatval);
-        self.type_info = TypeInfo.float;
-        self.data = @as(u48, @intCast(temp));
+    pub fn initErr(err: VmErr) RzValue {
+        const raw: u48 = @intFromEnum(err);
+        return init(TypeInfo.err, false, false, false, GcBit.white, raw);
     }
 
-    pub inline fn dataToF32(self: RzValue) f32 {
-        return @bitCast(@as(u32, @intCast(self.data)));
+    pub inline fn asF32(self: RzValue) f32 {
+        return switch (self.type_info) {
+            TypeInfo.int => blk: {
+                const int: i48 = @bitCast(self.data);
+                break :blk @floatFromInt(int);
+            },
+            TypeInfo.float => @bitCast(@as(u32, @truncate(self.data))),
+            else => @panic("Turning type into float is not defined yet"),
+        };
     }
-    pub inline fn f32ToData(self: *RzValue, val: f32) void {
+    pub inline fn setf32(self: *RzValue, val: f32) void {
         self.data = @as(u48, @intCast(@as(u32, @bitCast(val))));
     }
 };
