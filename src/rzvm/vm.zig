@@ -176,7 +176,7 @@ test "load_reg + subtraction" {
 test "load_reg + multiplication" {
     log("4. TEST load_reg + Multiplication\n", .{});
     var vm = rzvm.init();
-    // @TODO(Renzix): Finish
+    // defer rzvm.deinit();
     const r0 = 1000;
     const r1 = 7;
     const r2 = 1 << 24;
