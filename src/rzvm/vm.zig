@@ -15,6 +15,8 @@ const FatalErr = error{
     InvalidOpcode,
 };
 
+// @TODO(Renzix): we need to check at LOAD TIME if args.sbx is out of bounds for jmps
+
 pub const rzvm = struct {
     registers: [256]u64,
     fp: u16,
@@ -111,8 +113,27 @@ pub const rzvm = struct {
             },
             opcode.jmp => {
                 const args = inst.args.asbx;
-                // @TODO(Renzix): we need to check at LOAD TIME if args.sbx is out of bounds
                 self.pc = @intCast(@as(i32, self.pc) + args.sbx);
+
+                inst = program[self.pc];
+                self.pc += 1;
+                continue :vm inst.op;
+            },
+            opcode.jz => {
+                const args = inst.args.asbx;
+                const a = self.peekReg(args.a);
+                if ((a.nullable==true) or (a.data==0))
+                    self.pc = @intCast(@as(i32, self.pc) + args.sbx);
+
+                inst = program[self.pc];
+                self.pc += 1;
+                continue :vm inst.op;
+            },
+            opcode.jnz => {
+                const args = inst.args.asbx;
+                const a = self.peekReg(args.a);
+                if (!((a.nullable==true) or (a.data==0)))
+                    self.pc = @intCast(@as(i32, self.pc) + args.sbx);
 
                 inst = program[self.pc];
                 self.pc += 1;
@@ -239,6 +260,7 @@ test "subtraction" {
 test "multiplication" {
     var vm = rzvm.init();
     // defer rzvm.deinit();
+    errdefer vm.dump();
     const r0 = 1000;
     const vr0 = runtime.setVariable("Var0", rzval.initInt(r0));
     const r1 = 7;
@@ -267,9 +289,10 @@ test "multiplication" {
     try std.testing.expectEqual(rzval.initFloat(r3 * r3).toU64(), vm.registers[8]);
 }
 
-test "jmp" {
+test "jmp, jz, jnz" {
     var vm = rzvm.init();
     // defer rzvm.deinit();
+    errdefer vm.dump();
     const r0 = 100;
     const vr0 = runtime.setVariable("Var0", rzval.initInt(r0));
     const r1 = 200;
@@ -277,11 +300,23 @@ test "jmp" {
     const bytecode = [_]instruction{
         instruction.iABx(.loadg, 0x00, vr0),
         instruction.iABx(.loadg, 0x01, vr1),
-        instruction.iABx(.jmp, 0x00, 0x01),
+        instruction.iAsBx(.jmp, undefined, 0x01),
         instruction.iABC(.invalid, 0x00, 0x01, 0x01), // this should be skipped
-        instruction.iABC(.add, 0x00, 0x01, 0x01),
+        instruction.iABC(.add, 0x00, 0x01, 0x02),
+        instruction.iAsBx(.jz, 0xFF, 0x01), // should jump next cmd
+        instruction.iABC(.invalid, 0x00, 0x01, 0x03),
+        instruction.iAsBx(.jz, 0x00, 0x01), // should not jump next cmd
+        instruction.iABC(.add, 0x00, 0x01, 0x04),
+        instruction.iAsBx(.jnz, 0xFF, 0x01), // should not jump next cmd
+        instruction.iABC(.add, 0x00, 0x01, 0x05),
+        instruction.iAsBx(.jnz, 0x00, 0x01), // should jump next cmd
+        instruction.iABC(.invalid, 0x00, 0x01, 0x06),
         instruction.exit(),
     };
     try vm.run(&bytecode);
-    try std.testing.expectEqual(rzval.initInt(r0 + r1).toU64(), vm.registers[1]);
+    try std.testing.expectEqual(rzval.initInt(r0 + r1).toU64(), vm.registers[2]);
+    try std.testing.expectEqual(rzval.initInt(0).toU64(), vm.registers[3]);
+    try std.testing.expectEqual(rzval.initInt(r0 + r1).toU64(), vm.registers[4]);
+    try std.testing.expectEqual(rzval.initInt(r0 + r1).toU64(), vm.registers[5]);
+    try std.testing.expectEqual(rzval.initInt(0).toU64(), vm.registers[6]);
 }

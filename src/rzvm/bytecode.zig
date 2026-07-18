@@ -32,10 +32,10 @@ pub const instruction = packed struct(u32) {
         return .{ .op = op, .args = .{ .abx = .{ .a = a, .bx = bx } } };
     }
     pub fn iAsBx(op: opcode, a: u8, sbx: i16) instruction {
-        return .{ .op = op, .args = .{ .abx = .{ .a = a, .sbx = sbx } } };
+        return .{ .op = op, .args = .{ .asbx = .{ .a = a, .sbx = sbx } } };
     }
     pub fn exit() instruction {
-        return .{ .op = .exit, .args = .{ .abc = .{ .a = 0, .b = 0, .c = 0 } } };
+        return .{ .op = .exit, .args = .{ .abc = .{ .a = undefined, .b = undefined, .c = undefined } } };
     }
 };
 
@@ -59,8 +59,9 @@ pub const opcode = enum(u8) {
     gtn = 13, // greater than
     not = 14, // not
     // control flow
-    jmp = 15, // jump to stack loc
-    jnz = 16, // jump if not 0
-    call = 17, // jump to function
-    ret = 18, // returns from function
+    jmp = 15, // opcode(u8) + undefined(u8) + amount(u16)
+    jz = 16, // jump if not 0
+    jnz = 17, // jump if 0
+    call = 18, // jump to function
+    ret = 19, // returns from function
 };

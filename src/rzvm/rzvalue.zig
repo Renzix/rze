@@ -1,5 +1,6 @@
 const std = @import("std");
 
+// reorder these
 pub const TypeInfo = enum(u8) {
     int = 0b0000,
     float = 0b0001,
@@ -11,6 +12,8 @@ pub const TypeInfo = enum(u8) {
     struct_ = 0b1001,
     native_function = 0b1010,
     err = 0b1011,
+    boolean = 0b1100,
+    exec_function = 0b1101,
 };
 
 pub const GcBit = enum(u2) {
