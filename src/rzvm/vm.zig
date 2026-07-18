@@ -2,14 +2,14 @@ const std = @import("std");
 const log = @import("std").debug.print;
 
 const rzval = @import("rzvalue.zig").RzValue;
+const rzhelper = @import("rzvalue.zig");
 const typeinfo = @import("rzvalue.zig").TypeInfo;
 
-const opcodes = @import("bytecode.zig").opcodes;
+const opcode = @import("bytecode.zig").opcode;
 const VmErr = @import("rzvalue.zig").VmErr;
-const GcBit = @import("rzvalue.zig").GcBit;
 
-const fatalerr = error{
-    INVALID_OPCODE,
+const FatalErr = error{
+    InvalidOpcode,
 };
 
 pub const rzvm = struct {
@@ -27,65 +27,59 @@ pub const rzvm = struct {
         self.fp = 0;
         self.pc = 0;
     }
-    pub inline fn run(self: *rzvm, program: []u8) fatalerr!void {
+    pub fn run(self: *rzvm, program: []const u8) FatalErr!void {
         self.pc = 0;
         while (true) {
-            const code: opcodes = @enumFromInt(program[self.pc]);
+            const code: opcode = @enumFromInt(program[self.pc]);
             switch (code) {
-                opcodes.EXIT => {
+                opcode.exit => {
                     break;
                 },
-                opcodes.LOAD_REG => {
+                opcode.load_reg => {
                     defer self.pc += (1+1+8); // opcode(u8) + loc(u8) + value(u64)
                     const loc = program[self.pc + 1];
                     const ptr = &program[self.pc + 2];
                     const val = @as(*align(1) const rzval, @ptrCast(ptr)).*;
                     self.loadReg(val, loc);
                 },
-                opcodes.ADD => {
+                opcode.add => {
                     defer self.pc += 4; // opcode(u8) + loc(u8) + loc(u8) + loc(u8)
                     const loc1 = program[self.pc + 1];
                     const loc2 = program[self.pc + 2];
                     const loc3 = program[self.pc + 3];
-                    var a = self.peekReg(loc1);
-                    var b = self.peekReg(loc2);
+                    const a = self.peekReg(loc1);
+                    const b = self.peekReg(loc2);
 
-                    const c = blk: {
-                        if (a.nullable or b.nullable) {
-                            break :blk rzval.initErr(VmErr.add_null);
-                        }
-                        break :blk switch (a.type_info) {
-                            typeinfo.int => switch (b.type_info) {
-                                typeinfo.int => {
-                                    const val, const overflow = @addWithOverflow(@as(i48, @bitCast(b.data)), @as(i48, @bitCast(a.data)));
-                                    if (overflow == 0)
-                                        break :blk rzval.initInt(val)
-                                    else
-                                        break :blk rzval.initErr(VmErr.add_overflow);
-                                },
-                                typeinfo.float => {
-                                    break :blk rzval.initFloat(a.asF32()+b.asF32());
-                                },
-                                else => rzval.initErr(VmErr.add_error),
-                            },
-                            typeinfo.float => switch (b.type_info) {
-                                typeinfo.int => {
-                                    break :blk rzval.initFloat(a.asF32()+b.asF32());
-                                },
-                                typeinfo.float => {
-                                    break :blk rzval.initFloat(a.asF32()+b.asF32());
-                                },
-                                else => rzval.initErr(VmErr.add_error),
-                            },
-                            else => rzval.initErr(VmErr.add_error),
-                        };
-                    };
+                    const c = rzhelper.binOp(a, b, .add);
                     self.loadReg(c, loc3);
                 },
+                opcode.sub => {
+                    defer self.pc += 4; // opcode(u8) + loc(u8) + loc(u8) + loc(u8)
+                    const loc1 = program[self.pc + 1];
+                    const loc2 = program[self.pc + 2];
+                    const loc3 = program[self.pc + 3];
+                    const a = self.peekReg(loc1);
+                    const b = self.peekReg(loc2);
+
+                    const c = rzhelper.binOp(a, b, .sub);
+                    self.loadReg(c, loc3);
+                },
+                opcode.mul => {
+                    defer self.pc += 4; // opcode(u8) + loc(u8) + loc(u8) + loc(u8)
+                    const loc1 = program[self.pc + 1];
+                    const loc2 = program[self.pc + 2];
+                    const loc3 = program[self.pc + 3];
+                    const a = self.peekReg(loc1);
+                    const b = self.peekReg(loc2);
+
+                    const c = rzhelper.binOp(a, b, .mul);
+                    self.loadReg(c, loc3);
+                },
+
                 else => {
-                    defer self.pc += 1; // opcode (u8)
                     log("UNKNOWN OPCODE: {}\n", .{program[self.pc]});
-                    return fatalerr.INVALID_OPCODE;
+                    self.pc += 1; // opcode (u8)
+                    return FatalErr.InvalidOpcode;
                 },
             }
         }
@@ -95,19 +89,17 @@ pub const rzvm = struct {
     }
 
     pub fn peekReg(self: *rzvm, loc: u8) rzval {
-        const ptr = &self.registers[loc];
-        return @as(*align(1) const rzval, @ptrCast(ptr)).*;
+        return @bitCast(self.registers[loc]);
     }
 
-    pub fn dump(self: *rzvm) void {
+    pub fn dump(self: rzvm) void {
         log("\n=== VM STATE DUMP ===\n", .{});
         log("Program Count (PC): {}\n", .{self.pc});
         log("Function Pointer (FP): {}\n", .{self.fp});
         log("=== Registers ===\n", .{});
 
         for (self.registers, 0..) |reg, i| {
-            const raw_val = @as(u64, @bitCast(reg));
-            log("r{:0>3}: 0x{x:0>016}    ", .{ i, raw_val });
+            log("r{:0>3}: 0x{x:0>016}    ", .{ i, reg });
             if ((i + 1) % 4 == 0) {
                 log("\n", .{});
             }
@@ -118,37 +110,92 @@ pub const rzvm = struct {
 };
 
 test "Exit" {
-    log("1. TEST_EXIT\n", .{});
+    log("1. TEST exit\n", .{});
     var vm = rzvm.init();
+    errdefer vm.dump();
     // defer rzvm.deinit();
-    var bytecode = [_]u8{
-        @intFromEnum(opcodes.EXIT),
+    const bytecode = [_]u8{
+        @intFromEnum(opcode.exit),
     };
     try vm.run(&bytecode);
-    // vm.printstack();
     std.debug.assert(vm.pc == 0);
 }
 
-test "LOAD_REG + ADD" {
-    log("2. TEST LOAD_REG\n", .{});
+test "load_reg + addition" {
+    log("2. TEST load_reg + add\n", .{});
     var vm = rzvm.init();
+    errdefer vm.dump();
     // defer rzvm.deinit();
-    const val0 = 1012;
-    const val1 = -5;
-    const val2 = -140737488355328;
-    const val3: f32 = 3.141595653589;
-    var bytecode =
-        [_]u8{ @intFromEnum(opcodes.LOAD_REG), 0x00 } ++ rzval.initInt(val0).toBytes() ++
-        [_]u8{ @intFromEnum(opcodes.LOAD_REG), 0x01 } ++ rzval.initInt(val1).toBytes() ++
-        [_]u8{ @intFromEnum(opcodes.LOAD_REG), 0x02 } ++ rzval.initInt(val2).toBytes() ++
-        [_]u8{ @intFromEnum(opcodes.LOAD_REG), 0x03 } ++ rzval.initFloat(val3).toBytes() ++
-        [_]u8{ @intFromEnum(opcodes.ADD), 0x00, 0x01, 0x04 } ++
-        [_]u8{ @intFromEnum(opcodes.ADD), 0x01, 0x02, 0x05 } ++
-        [_]u8{ @intFromEnum(opcodes.ADD), 0x03, 0x03, 0x06 } ++
-        [_]u8{@intFromEnum(opcodes.EXIT)};
+    const r0 = 1012;
+    const r1 = -5;
+    const r2 = -140737488355328;
+    const r3: f32 = 3.141595653589;
+    const bytecode =
+        [_]u8{ @intFromEnum(opcode.load_reg), 0x00 } ++ rzval.initInt(r0).toBytes() ++
+        [_]u8{ @intFromEnum(opcode.load_reg), 0x01 } ++ rzval.initInt(r1).toBytes() ++
+        [_]u8{ @intFromEnum(opcode.load_reg), 0x02 } ++ rzval.initInt(r2).toBytes() ++
+        [_]u8{ @intFromEnum(opcode.load_reg), 0x03 } ++ rzval.initFloat(r3).toBytes() ++
+        [_]u8{ @intFromEnum(opcode.add), 0x00, 0x01, 0x04 } ++
+        [_]u8{ @intFromEnum(opcode.add), 0x01, 0x02, 0x05 } ++
+        [_]u8{ @intFromEnum(opcode.add), 0x03, 0x03, 0x06 } ++
+        [_]u8{@intFromEnum(opcode.exit)};
     try vm.run(&bytecode);
-    try std.testing.expectEqual(rzval.initInt(val0 + val1).toU64(), vm.registers[4]);
-    try std.testing.expectEqual(rzval.initErr(VmErr.add_overflow).toU64(), vm.registers[5]);
-    try std.testing.expectEqual(rzval.initFloat(val3 + val3).toU64(), vm.registers[6]);
-    // vm.dump();
+    try std.testing.expectEqual(rzval.initInt(r0 + r1).toU64(), vm.registers[4]);
+    try std.testing.expectEqual(rzval.initErr(VmErr.overflow).toU64(), vm.registers[5]);
+    try std.testing.expectEqual(rzval.initFloat(r3 + r3).toU64(), vm.registers[6]);
+}
+
+test "load_reg + subtraction" {
+    log("3. TEST load_reg + subtraction\n", .{});
+    var vm = rzvm.init();
+    errdefer vm.dump();
+    // defer rzvm.deinit();
+    const r0 = 1000;
+    const r1 = 7;
+    const r2 = -140737488355328;
+    const r3: f32 = 2.5;
+    const bytecode =
+        [_]u8{ @intFromEnum(opcode.load_reg), 0x00 } ++ rzval.initInt(r0).toBytes() ++
+        [_]u8{ @intFromEnum(opcode.load_reg), 0x01 } ++ rzval.initInt(r1).toBytes() ++
+        [_]u8{ @intFromEnum(opcode.load_reg), 0x02 } ++ rzval.initInt(r2).toBytes() ++
+        [_]u8{ @intFromEnum(opcode.load_reg), 0x03 } ++ rzval.initFloat(r3).toBytes() ++
+        [_]u8{ @intFromEnum(opcode.sub), 0x00, 0x01, 0x04 } ++
+        [_]u8{ @intFromEnum(opcode.sub), 0x01, 0x00, 0x05 } ++
+        [_]u8{ @intFromEnum(opcode.sub), 0x02, 0x01, 0x06 } ++
+        [_]u8{ @intFromEnum(opcode.sub), 0x00, 0x03, 0x07 } ++
+        [_]u8{ @intFromEnum(opcode.sub), 0x03, 0x03, 0x08 } ++
+        [_]u8{@intFromEnum(opcode.exit)};
+    try vm.run(&bytecode);
+    try std.testing.expectEqual(rzval.initInt(r0 - r1).toU64(), vm.registers[4]);
+    try std.testing.expectEqual(rzval.initInt(r1 - r0).toU64(), vm.registers[5]);
+    try std.testing.expectEqual(rzval.initErr(VmErr.overflow).toU64(), vm.registers[6]);
+    try std.testing.expectEqual(rzval.initFloat(r0 - r3).toU64(), vm.registers[7]);
+    try std.testing.expectEqual(rzval.initFloat(r3 - r3).toU64(), vm.registers[8]);
+}
+
+test "load_reg + multiplication" {
+    log("4. TEST load_reg + Multiplication\n", .{});
+    var vm = rzvm.init();
+    // @TODO(Renzix): Finish
+    const r0 = 1000;
+    const r1 = 7;
+    const r2 = 1 << 24;
+    const r3: f32 = 2.5;
+    const bytecode =
+        [_]u8{ @intFromEnum(opcode.load_reg), 0x00 } ++ rzval.initInt(r0).toBytes() ++
+        [_]u8{ @intFromEnum(opcode.load_reg), 0x01 } ++ rzval.initInt(r1).toBytes() ++
+        [_]u8{ @intFromEnum(opcode.load_reg), 0x02 } ++ rzval.initInt(r2).toBytes() ++
+        [_]u8{ @intFromEnum(opcode.load_reg), 0x03 } ++ rzval.initFloat(r3).toBytes() ++
+        [_]u8{ @intFromEnum(opcode.mul), 0x00, 0x01, 0x04 } ++
+        [_]u8{ @intFromEnum(opcode.mul), 0x02, 0x02, 0x05 } ++
+        [_]u8{ @intFromEnum(opcode.mul), 0x00, 0x03, 0x06 } ++
+        [_]u8{ @intFromEnum(opcode.mul), 0x01, 0x03, 0x07 } ++
+        [_]u8{ @intFromEnum(opcode.mul), 0x03, 0x03, 0x08 } ++
+        [_]u8{@intFromEnum(opcode.exit)};
+    try vm.run(&bytecode);
+    try std.testing.expectEqual(rzval.initInt(r0 * r1).toU64(), vm.registers[4]);
+    try std.testing.expectEqual(rzval.initErr(VmErr.overflow).toU64(), vm.registers[5]);
+    try std.testing.expectEqual(rzval.initFloat(r0 * r3).toU64(), vm.registers[6]);
+    try std.testing.expectEqual(rzval.initFloat(r1 * r3).toU64(), vm.registers[7]);
+    try std.testing.expectEqual(rzval.initFloat(r3 * r3).toU64(), vm.registers[8]);
 }

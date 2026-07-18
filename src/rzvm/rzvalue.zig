@@ -22,9 +22,9 @@ pub const GcBit = enum(u2) {
 
 pub const VmErr = enum(u48) {
     unknown = 0,
-    add_overflow = 1,
-    add_error = 2,
-    add_null = 3,
+    overflow = 1,
+    type_mismatch = 2,
+    null_operand = 3,
 };
 
 // packed 64 bit struct for "common types"
@@ -52,7 +52,7 @@ pub const RzValue = packed struct(u64) {
             .mutable = mutable,
             .nullable = nullable,
             .gc = gc,
-            .reserved = undefined,
+            .reserved = 0,
             .data = val,
         };
     }
@@ -87,3 +87,57 @@ pub const RzValue = packed struct(u64) {
         self.data = @as(u48, @intCast(@as(u32, @bitCast(val))));
     }
 };
+
+pub fn binOp(a: RzValue, b: RzValue, comptime op: enum { add, sub, mul }) RzValue {
+    return blk: {
+        if (a.type_info == .err) break :blk a;
+        if (b.type_info == .err) break :blk b;
+        if (a.nullable or b.nullable) {
+            break :blk RzValue.initErr(VmErr.null_operand);
+        }
+        break :blk switch (a.type_info) {
+            .int => switch (b.type_info) {
+                .int => {
+                    const val, const overflow = switch (op) {
+                        .add => @addWithOverflow(@as(i48, @bitCast(a.data)),
+                                                @as(i48, @bitCast(b.data))),
+                        .sub => @subWithOverflow(@as(i48, @bitCast(a.data)),
+                                                @as(i48, @bitCast(b.data))),
+                        .mul => @mulWithOverflow(@as(i48, @bitCast(a.data)),
+                                                @as(i48, @bitCast(b.data))),
+                    };
+                    if (overflow == 0)
+                        break :blk RzValue.initInt(val)
+                    else
+                        break :blk RzValue.initErr(VmErr.overflow);
+                },
+                .float => {
+                    break :blk switch (op) {
+                        .add => RzValue.initFloat(a.asF32()+b.asF32()),
+                        .sub => RzValue.initFloat(a.asF32()-b.asF32()),
+                        .mul => RzValue.initFloat(a.asF32()*b.asF32()),
+                    };
+                },
+                else => RzValue.initErr(VmErr.type_mismatch),
+            },
+            .float => switch (b.type_info) {
+                .int => {
+                    break :blk switch (op) {
+                        .add => RzValue.initFloat(a.asF32()+b.asF32()),
+                        .sub => RzValue.initFloat(a.asF32()-b.asF32()),
+                        .mul => RzValue.initFloat(a.asF32()*b.asF32()),
+                    };
+                },
+                .float => {
+                    break :blk switch (op) {
+                        .add => RzValue.initFloat(a.asF32()+b.asF32()),
+                        .sub => RzValue.initFloat(a.asF32()-b.asF32()),
+                        .mul => RzValue.initFloat(a.asF32()*b.asF32()),
+                    };
+                },
+                else => RzValue.initErr(VmErr.type_mismatch),
+            },
+            else => RzValue.initErr(VmErr.type_mismatch),
+        };
+    };
+}
