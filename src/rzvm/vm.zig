@@ -19,6 +19,8 @@ const VmErr = error{
     StackOverflow,
     CallingUncallable,
     ExpectedFrame,
+    ExpectedString,
+    IncorrectReturnValueCount,
 };
 
 // @TODO(Renzix): we need to check at LOAD TIME if args.sbx is out of bounds for jmps
@@ -183,20 +185,20 @@ pub const rzvm = struct {
                         self.pc = proto.impl.bytecode.startpc;
                     },
                     .exec => {
+                        if (args.b!=0x01)
+                            return VmErr.IncorrectReturnValueCount;
                         var argv: [256][]const u8 = undefined;
                         argv[0] = proto.impl.exec.slice();
                         for (0..args.c) |i| {
                             const param = self.peekReg(args.a + 1 + @as(u8, @intCast(i)));
                             if (param.type_info != .string) {
-                                self.loadReg(rzval.initErr(.type_mismatch), args.a);
-                                break;
+                                return VmErr.ExpectedString;
                             }
                             const header: *const str.StringHeader = @ptrFromInt(param.data);
                             argv[1+i] = header.slice();
                         }
-                        const a = argv[0..args.c+1];
 
-                        var child = std.process.spawn(std.testing.io, .{ .argv = a })
+                        var child = std.process.spawn(std.testing.io, .{ .argv = argv[0..args.c+1] })
                             catch @panic("process panic'd");
                         // @TODO(Renzix): Make async and dont wait
                         const term = child.wait(std.testing.io)
@@ -502,6 +504,8 @@ test "call, ret, executable" {
     const vr1 = vm.runtime.setVariable("arg1", rzval.initString(&s1.header));
     const s2 = str.CreateStaticStr("exit 7");
     const vr2 = vm.runtime.setVariable("arg2", rzval.initString(&s2.header));
+    // const r0 = 200;
+    // const vr0 = vm.runtime.setVariable("Var1", rzval.initInt(r2));
     const bytecode = [_]instruction{
         instruction.iABx(.loadg, 0x00, vr0),
         instruction.iABx(.loadg, 0x01, vr1),
