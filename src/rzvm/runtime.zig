@@ -15,14 +15,14 @@ pub const Runtime = struct {
     global: [std.math.maxInt(u16)+1]RzValue,
     functions: [1024]Proto, // replace with closures???
     symbol: std.StringHashMap(u16),
-    var arena: std.heap.ArenaAllocator = .init(std.heap.page_allocator);
+    const allocator = std.heap.c_allocator;
 
     pub fn init() Runtime {
         return .{
             .fi = 0,
             .vi = 0,
             .global = [_]RzValue{RzValue.initErr(RzErr.name_not_found)} ** (std.math.maxInt(u16) + 1),
-            .symbol = .init(arena.allocator()),
+            .symbol = .init(allocator),
             .functions = undefined,
         };
     }

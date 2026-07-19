@@ -38,6 +38,7 @@ pub fn build(b: *std.Build) void {
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/rzvm/vm.zig"),
             .target = target,
+            .link_libc = true,
             .optimize = optimize,
         }),
     });
@@ -51,8 +52,8 @@ pub fn build(b: *std.Build) void {
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/rzx/parser.zig"),
             .target = target,
-            .optimize = optimize,
             .link_libc = true,
+            .optimize = optimize,
         }),
     });
 
