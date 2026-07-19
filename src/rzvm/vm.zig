@@ -283,9 +283,9 @@ pub const rzvm = struct {
                 const args = inst.args.abc;
                 const a = self.peekReg(args.a);
                 switch (args.b) {
-                    0x00 => self.pipe.stdin = a, // stdin
-                    0x01 => self.pipe.stdout = a, // stdout
-                    0x02 => self.pipe.stderr = a, // stderr
+                    0x00 => self.pipe.stdin = a,
+                    0x01 => self.pipe.stdout = a,
+                    0x02 => self.pipe.stderr = a,
                     else => return VmErr.InvalidStream,
                 }
 
