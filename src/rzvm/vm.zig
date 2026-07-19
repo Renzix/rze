@@ -11,6 +11,8 @@ const RzErr = @import("rzvalue.zig").RzErr;
 
 const Runtime = @import("runtime.zig").Runtime;
 
+const str = @import("datatypes/string.zig");
+
 const VmErr = error{
     InvalidOpcode,
     Arity,
@@ -58,6 +60,18 @@ pub const rzvm = struct {
                 self.pc += 1;
                 continue :vm inst.op;
             },
+            // @TODO(Renzix): Add loading .rzc files?
+            // .loadc => {
+            //     const args = inst.args.abx;
+            //     const loc = args.a;
+            //     const index = args.bx;
+            //     const val = self.comptime.constants[index];
+            //     self.loadReg(val, loc);
+
+            //     inst = program[self.pc];
+            //     self.pc += 1;
+            //     continue :vm inst.op;
+            // },
             .loadb => {
                 const args = inst.args.abx;
                 const val = rzval.initInt(@as(i48, args.bx));
@@ -150,22 +164,52 @@ pub const rzvm = struct {
                 // @TODO(Renzix): Dont ignore args.b (this is # of return values)
                 if (func.type_info != typeinfo.function)
                     return VmErr.CallingUncallable;
+
                 const funcindex: usize = func.data;
                 if (funcindex >= self.runtime.functions.len)
                     return VmErr.CallingUncallable;
                 const proto = self.runtime.functions[funcindex];
+                switch (proto.impl) {
+                    .bytecode => {
+                        const newfp: u16 = self.fp + args.a + 1;
+                        if (args.c != proto.argcount)
+                            return VmErr.Arity;
+                        if ((newfp + proto.impl.bytecode.framesize) > self.registers.len)
+                            return VmErr.StackOverflow;
 
-                const newfp: u16 = self.fp + args.a + 1;
+                        self.registers[newfp-1] = rzval.initFrame(self.pc, self.fp).toU64();
 
-                if (args.c != proto.argcount)
-                    return VmErr.Arity;
-                if ((newfp + proto.framesize) > self.registers.len)
-                    return VmErr.StackOverflow;
+                        self.fp = newfp;
+                        self.pc = proto.impl.bytecode.startpc;
+                    },
+                    .exec => {
+                        var argv: [256][]const u8 = undefined;
+                        argv[0] = proto.impl.exec.slice();
+                        for (0..args.c) |i| {
+                            const param = self.peekReg(args.a + 1 + @as(u8, @intCast(i)));
+                            if (param.type_info != .string) {
+                                self.loadReg(rzval.initErr(.type_mismatch), args.a);
+                                break;
+                            }
+                            const header: *const str.StringHeader = @ptrFromInt(param.data);
+                            argv[1+i] = header.slice();
+                        }
+                        const a = argv[0..args.c+1];
 
-                self.registers[newfp-1] = rzval.initFrame(self.pc, self.fp).toU64();
+                        var child = std.process.spawn(std.testing.io, .{ .argv = a })
+                            catch @panic("process panic'd");
+                        // @TODO(Renzix): Make async and dont wait
+                        const term = child.wait(std.testing.io)
+                            catch @panic("process panic'd2");
 
-                self.fp = newfp;
-                self.pc = proto.startpc;
+                        const rc: u8 = switch (term) {
+                            .exited => |code| code,
+                            .signal => |sig| 128 + @as(u8, @intCast(@intFromEnum(sig))),
+                            .stopped, .unknown => 1,
+                        };
+                        self.loadReg(rzval.initErrCode(rc), args.a);
+                    },
+                }
 
                 inst = program[self.pc];
                 self.pc += 1;
@@ -444,4 +488,27 @@ test "call, ret" {
     try vm.run(&bytecode);
     try std.testing.expectEqual(rzval.initInt(r1 + r2).toU64(), vm.registers[0]);
     try std.testing.expectEqual(@as(u16, 0), vm.fp);
+}
+
+// requires sh to be present in the shell
+test "call, ret, executable" {
+    var vm = rzvm.init();
+    // defer rzvm.deinit();
+    errdefer vm.dump();
+    var s0 = str.CreateStaticStr("/bin/sh");
+    const r0 = vm.runtime.setExecFunction(&s0.header, 2, 0);
+    const vr0 = vm.runtime.setVariable("command", rzval.initFunction(r0));
+    const s1 = str.CreateStaticStr("-c");
+    const vr1 = vm.runtime.setVariable("arg1", rzval.initString(&s1.header));
+    const s2 = str.CreateStaticStr("exit 7");
+    const vr2 = vm.runtime.setVariable("arg2", rzval.initString(&s2.header));
+    const bytecode = [_]instruction{
+        instruction.iABx(.loadg, 0x00, vr0),
+        instruction.iABx(.loadg, 0x01, vr1),
+        instruction.iABx(.loadg, 0x02, vr2),
+        instruction.iABC(.call, 0x00, 0x01, 0x02),
+        instruction.exit(),
+    };
+    try vm.run(&bytecode);
+    try std.testing.expectEqual(rzval.initErrCode(7).toU64(), vm.registers[0]);
 }

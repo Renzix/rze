@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const str = @import("datatypes/string.zig");
+
 // reorder these
 pub const TypeInfo = enum(u8) {
     int = 0b0000,
@@ -10,10 +12,10 @@ pub const TypeInfo = enum(u8) {
     array = 0b0111,
     map = 0b1000,
     struct_ = 0b1001,
-    native_function = 0b1010,
+    // native_function = 0b1010,
     err = 0b1011,
     boolean = 0b1100,
-    exec_function = 0b1101,
+    // exec_function = 0b1101,
     frame = 0b1110,
 };
 
@@ -73,9 +75,20 @@ pub const RzValue = packed struct(u64) {
         return init(TypeInfo.float, false, false, false, GcBit.white, raw);
     }
 
+    // static strings are always ptrs for now
+    pub fn initString(val: *const str.StringHeader) RzValue {
+        const raw: u48 = @intCast(@intFromPtr(val));
+        return init(TypeInfo.string, true, false, false, GcBit.white, raw);
+    }
+
     pub fn initErr(err: RzErr) RzValue {
         const raw: u48 = @intFromEnum(err);
         return init(TypeInfo.err, false, false, false, GcBit.white, raw);
+    }
+
+    pub fn initErrCode(val: u8) RzValue {
+        const raw: u48 = @as(u48, val);
+        return init(TypeInfo.err, false, false, false, GcBit.static, raw);
     }
 
     pub fn initFunction(index: u16) RzValue {
