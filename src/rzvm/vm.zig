@@ -13,15 +13,19 @@ const Runtime = @import("runtime.zig").Runtime;
 
 const VmErr = error{
     InvalidOpcode,
+    Arity,
+    StackOverflow,
+    CallingUncallable,
+    ExpectedFrame,
 };
 
 // @TODO(Renzix): we need to check at LOAD TIME if args.sbx is out of bounds for jmps
 
 pub const rzvm = struct {
-    registers: [256]u64,
+    registers: [65536]u64,
     runtime: Runtime,
-    fp: u16,
     pc: u16,
+    fp: u16,
     pub fn init() rzvm {
         const rt = Runtime.init();
         return rzvm{
@@ -32,8 +36,8 @@ pub const rzvm = struct {
         };
     }
     pub fn reset(self: *rzvm) void {
-        self.fp = 0;
         self.pc = 0;
+        self.fp = 0;
     }
     pub fn run(self: *rzvm, program: []const instruction) VmErr!void {
         var inst = program[0];
@@ -55,10 +59,8 @@ pub const rzvm = struct {
             },
             .loadb => {
                 const args = inst.args.abx;
-                const loc = args.a;
-                const data = args.bx;
-                const val = rzval.initInt(@as(i48, data));
-                self.loadReg(val, loc);
+                const val = rzval.initInt(@as(i48, args.bx));
+                self.loadReg(val, args.a);
 
                 inst = program[self.pc];
                 self.pc += 1;
@@ -66,9 +68,7 @@ pub const rzvm = struct {
             },
             .mov => {
                 const args = inst.args.abc;
-                const loc1 = args.a;
-                const loc2 = args.b;
-                self.registers[loc2] = self.registers[loc1];
+                self.registers[args.b] = self.registers[args.a];
 
                 inst = program[self.pc];
                 self.pc += 1;
@@ -143,6 +143,52 @@ pub const rzvm = struct {
                 self.pc += 1;
                 continue :vm inst.op;
             },
+            .call => {
+                const args = inst.args.abc;
+                const func = self.peekReg(args.a);
+                // @TODO(Renzix): Dont ignore args.b (this is # of return values)
+                if (func.type_info != typeinfo.function)
+                    return VmErr.CallingUncallable;
+                const funcindex: usize = func.data;
+                if (funcindex >= self.runtime.functions.len)
+                    return VmErr.CallingUncallable;
+                const proto = self.runtime.functions[funcindex];
+
+                const newfp: u16 = self.fp + args.a + 1;
+
+                if (args.c != proto.argcount)
+                    return VmErr.Arity;
+                if ((newfp + proto.framesize) > self.registers.len)
+                    return VmErr.StackOverflow;
+
+                self.registers[newfp-1] = rzval.initFrame(self.pc, self.fp).toU64();
+
+                self.fp = newfp;
+                self.pc = proto.startpc;
+
+                inst = program[self.pc];
+                self.pc += 1;
+                continue :vm inst.op;
+            },
+            .ret => {
+                const args = inst.args.abc;
+                if (self.fp == 0) return; // if you return
+
+                const frame: rzval = @bitCast(self.registers[self.fp - 1]);
+                if (frame.type_info != .frame)
+                    return VmErr.ExpectedFrame;
+
+                for (0..args.b) |i| {
+                    self.registers[self.fp - 1 + i] = self.registers[self.fp + args.a + i];
+                }
+
+                self.pc = @truncate(frame.data >> 16);
+                self.fp = @truncate(frame.data >>  0);
+
+                inst = program[self.pc];
+                self.pc += 1;
+                continue :vm inst.op;
+            },
             inline .ltn, .gtn, .gtne,
                    .ltne, .eql, .neq => |op| {
                 const args = inst.args.abc;
@@ -173,11 +219,11 @@ pub const rzvm = struct {
         }
     }
     pub fn loadReg(self: *rzvm, val: rzval, loc: u8) void {
-        self.registers[loc] = @bitCast(val);
+        self.registers[self.fp + loc] = @bitCast(val);
     }
 
     pub fn peekReg(self: *rzvm, loc: u8) rzval {
-        return @bitCast(self.registers[loc]);
+        return @bitCast(self.registers[self.fp + loc]);
     }
 
     pub fn dump(self: rzvm) void {
@@ -347,7 +393,7 @@ test "jmp, jz, jnz" {
     try std.testing.expectEqual(rzval.initInt(0).toU64(), vm.registers[6]);
 }
 
-test "eql, neq " {
+test "eql, neq" {
     var vm = rzvm.init();
     // defer rzvm.deinit();
     errdefer vm.dump();
@@ -374,3 +420,27 @@ test "eql, neq " {
 }
 
 // @TODO(Renzix): Write test for ltn gtn ltne gtne =)
+
+test "call, ret" {
+    var vm = rzvm.init();
+    // defer rzvm.deinit();
+    errdefer vm.dump();
+    const r0 = vm.runtime.setFunction(5, 2, 3, 0);
+    const vr0 = vm.runtime.setVariable("Func0", rzval.initFunction(r0));
+    const r1 = 100;
+    const vr1 = vm.runtime.setVariable("Var0", rzval.initInt(r1));
+    const r2 = 200;
+    const vr2 = vm.runtime.setVariable("Var1", rzval.initInt(r2));
+    const bytecode = [_]instruction{
+        instruction.iABx(.loadg, 0x00, vr0),
+        instruction.iABx(.loadg, 0x01, vr1),
+        instruction.iABx(.loadg, 0x02, vr2),
+        instruction.iABC(.call, 0x00, 0x01, 0x02),
+        instruction.exit(),
+        instruction.iABC(.add, 0x00, 0x01, 0x02),
+        instruction.iABC(.ret, 0x02, 0x01, 0x00),
+    };
+    try vm.run(&bytecode);
+    try std.testing.expectEqual(rzval.initInt(r1 + r2).toU64(), vm.registers[0]);
+    try std.testing.expectEqual(@as(u16, 0), vm.fp);
+}

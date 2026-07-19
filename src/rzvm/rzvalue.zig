@@ -14,6 +14,7 @@ pub const TypeInfo = enum(u8) {
     err = 0b1011,
     boolean = 0b1100,
     exec_function = 0b1101,
+    frame = 0b1110,
 };
 
 pub const GcBit = enum(u2) {
@@ -75,6 +76,16 @@ pub const RzValue = packed struct(u64) {
     pub fn initErr(err: RzErr) RzValue {
         const raw: u48 = @intFromEnum(err);
         return init(TypeInfo.err, false, false, false, GcBit.white, raw);
+    }
+
+    pub fn initFunction(index: u16) RzValue {
+        const raw: u48 = index;
+        return init(TypeInfo.function, false, false, false, GcBit.static, raw);
+    }
+
+    pub fn initFrame(pc: u16, fp: u16) RzValue {
+        const raw = @as(u48, pc) << 16 | fp;
+        return init(TypeInfo.frame, false, false, false, GcBit.static, raw);
     }
 
     pub inline fn asI48(self: RzValue) i48 {
