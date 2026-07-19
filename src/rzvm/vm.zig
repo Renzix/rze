@@ -185,6 +185,10 @@ pub const rzvm = struct {
                         self.pc = proto.impl.bytecode.startpc;
                     },
                     .exec => {
+                        // Starting processes is slow so assume we never go here
+                        @branchHint(.cold);
+                        // @TODO(Renzix): Make this into a seperate function???
+                        // so we dont have to inline this code???
                         if (args.b!=0x01)
                             return VmErr.IncorrectReturnValueCount;
                         var argv: [256][]const u8 = undefined;
