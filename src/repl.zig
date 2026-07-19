@@ -75,6 +75,7 @@ pub const repl = struct {
         // var compiler = c.Compiler.init();
         // _ = compiler.run(ast) catch unreachable;
 
+        // @TODO(Renzix): Make work
         _ = v.rzvm.init();
         // const ret = vm.run();
     }

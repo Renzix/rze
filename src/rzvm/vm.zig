@@ -21,6 +21,13 @@ const VmErr = error{
     ExpectedFrame,
     ExpectedString,
     IncorrectReturnValueCount,
+    InvalidStream,
+};
+
+const Pipe = struct {
+    stdin: ?rzval = null,
+    stdout: ?rzval = null,
+    stderr: ?rzval = null,
 };
 
 // @TODO(Renzix): we need to check at LOAD TIME if args.sbx is out of bounds for jmps
@@ -31,13 +38,17 @@ pub const rzvm = struct {
     runtime: Runtime,
     pc: u16,
     fp: u16,
-    pub fn init() rzvm {
+    pipe: Pipe,
+    io: std.Io,
+    pub fn init(io: std.Io) rzvm {
         const rt = Runtime.init();
         return rzvm{
             .registers = comptime ([_]u64{0} ** 1024),
             .runtime = rt,
             .pc = 0,
             .fp = 0,
+            .io = io,
+            .pipe = .{},
         };
     }
     pub fn reset(self: *rzvm) void {
@@ -202,11 +213,18 @@ pub const rzvm = struct {
                             argv[1+i] = header.slice();
                         }
 
-                        var child = std.process.spawn(std.testing.io, .{ .argv = argv[0..args.c+1] })
-                            catch @panic("process panic'd");
+                        // check self.pipe values and ensure they are valid .fd's
+
+                        var child = std.process.spawn(self.io, .{
+                            .argv   = argv[0..args.c+1],
+                            .stdout = rzhelper.toStdIo(self.pipe.stdout),
+                            .stdin  = rzhelper.toStdIo(self.pipe.stdin),
+                            .stderr = rzhelper.toStdIo(self.pipe.stderr),
+                        }) catch @panic("process couldnt start for some reason");
+
                         // @TODO(Renzix): Make async and dont wait
-                        const term = child.wait(std.testing.io)
-                            catch @panic("process panic'd2");
+                        const term = child.wait(self.io)
+                            catch @panic("process panic'd!");
 
                         const rc: u8 = switch (term) {
                             .exited => |code| code,
@@ -216,7 +234,6 @@ pub const rzvm = struct {
                         self.loadReg(rzval.initErrCode(rc), args.a);
                     },
                 }
-
                 inst = program[self.pc];
                 self.pc += 1;
                 continue :vm inst.op;
@@ -262,6 +279,20 @@ pub const rzvm = struct {
                 self.pc += 1;
                 continue :vm inst.op;
             },
+            .setio => {
+                const args = inst.args.abc;
+                const a = self.peekReg(args.a);
+                switch (args.b) {
+                    0x00 => self.pipe.stdin = a, // stdin
+                    0x01 => self.pipe.stdout = a, // stdout
+                    0x02 => self.pipe.stderr = a, // stderr
+                    else => return VmErr.InvalidStream,
+                }
+
+                inst = program[self.pc];
+                self.pc += 1;
+                continue :vm inst.op;
+            },
             else => {
                 log("UNKNOWN OPCODE: {}\n", .{inst});
                 self.pc += 1; // opcode (u8)
@@ -295,7 +326,7 @@ pub const rzvm = struct {
 };
 
 test "Exit" {
-    var vm = rzvm.init();
+    var vm = rzvm.init(std.testing.io);
     errdefer vm.dump();
     // defer rzvm.deinit();
     const bytecode = [_]instruction{
@@ -306,7 +337,7 @@ test "Exit" {
 }
 
 test "load and mov" {
-    var vm = rzvm.init();
+    var vm = rzvm.init(std.testing.io);
     // defer rzvm.deinit();
     errdefer vm.dump();
     const r0 = 1001;
@@ -321,7 +352,7 @@ test "load and mov" {
 }
 
 test "addition" {
-    var vm = rzvm.init();
+    var vm = rzvm.init(std.testing.io);
     errdefer vm.dump();
     // defer rzvm.deinit();
     const r0 = 1012;
@@ -349,7 +380,7 @@ test "addition" {
 }
 
 test "subtraction" {
-    var vm = rzvm.init();
+    var vm = rzvm.init(std.testing.io);
     // defer rzvm.deinit();
     errdefer vm.dump();
     const r0 = 1000;
@@ -381,7 +412,7 @@ test "subtraction" {
 }
 
 test "multiplication" {
-    var vm = rzvm.init();
+    var vm = rzvm.init(std.testing.io);
     // defer rzvm.deinit();
     errdefer vm.dump();
     const r0 = 1000;
@@ -413,7 +444,7 @@ test "multiplication" {
 }
 
 test "jmp, jz, jnz" {
-    var vm = rzvm.init();
+    var vm = rzvm.init(std.testing.io);
     // defer rzvm.deinit();
     errdefer vm.dump();
     const r0 = 100;
@@ -445,7 +476,7 @@ test "jmp, jz, jnz" {
 }
 
 test "eql, neq" {
-    var vm = rzvm.init();
+    var vm = rzvm.init(std.testing.io);
     // defer rzvm.deinit();
     errdefer vm.dump();
     const r0 = 100;
@@ -473,7 +504,7 @@ test "eql, neq" {
 // @TODO(Renzix): Write test for ltn gtn ltne gtne =)
 
 test "call, ret" {
-    var vm = rzvm.init();
+    var vm = rzvm.init(std.testing.io);
     // defer rzvm.deinit();
     errdefer vm.dump();
     const r0 = vm.runtime.setFunction(5, 2, 3, 0);
@@ -498,7 +529,7 @@ test "call, ret" {
 
 // requires sh to be present in the shell
 test "call, ret, executable" {
-    var vm = rzvm.init();
+    var vm = rzvm.init(std.testing.io);
     // defer rzvm.deinit();
     errdefer vm.dump();
     var s0 = str.CreateStaticStr("/bin/sh");

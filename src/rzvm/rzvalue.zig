@@ -12,7 +12,7 @@ pub const TypeInfo = enum(u8) {
     array = 0b0111,
     map = 0b1000,
     struct_ = 0b1001,
-    // native_function = 0b1010,
+    fd = 0b1010,
     err = 0b1011,
     boolean = 0b1100,
     // exec_function = 0b1101,
@@ -242,4 +242,13 @@ pub fn compare(a: RzValue, b: RzValue,
             else => false,
         };
     };
+}
+
+pub fn toStdIo(v: ?RzValue) std.process.SpawnOptions.StdIo {
+    const val = v orelse return .inherit;
+    std.debug.assert(val.type_info == .fd);
+    return .{ .file = .{
+        .handle = @bitCast(@as(u32, @truncate(val.data))),
+        .flags = .{ .nonblocking = false },
+    }};
 }

@@ -65,4 +65,6 @@ pub const opcode = enum(u8) {
     jnz = 18, // jump if 0
     call = 19, // opcode(u8) + reg for funtion ptr(u8) + return count(u8) + argcount(u8)
     ret = 20, // returns from function
+    // misc
+    setio = 21, // opcode(u8) + reg of fd(u8) + stream(u8) + unused(u8)
 };
