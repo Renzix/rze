@@ -11,7 +11,7 @@ const RzErr = @import("rzvalue.zig").RzErr;
 
 const runtime = @import("runtime.zig").runtime;
 
-const FatalErr = error{
+const VmErr = error{
     InvalidOpcode,
 };
 
@@ -32,7 +32,7 @@ pub const rzvm = struct {
         self.fp = 0;
         self.pc = 0;
     }
-    pub fn run(self: *rzvm, program: []const instruction) FatalErr!void {
+    pub fn run(self: *rzvm, program: []const instruction) VmErr!void {
         self.pc = 0;
         var inst = program[0];
         self.pc = 1;
@@ -166,7 +166,7 @@ pub const rzvm = struct {
             else => {
                 log("UNKNOWN OPCODE: {}\n", .{inst});
                 self.pc += 1; // opcode (u8)
-                return FatalErr.InvalidOpcode;
+                return VmErr.InvalidOpcode;
             },
         }
     }
