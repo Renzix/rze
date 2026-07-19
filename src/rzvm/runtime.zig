@@ -1,11 +1,11 @@
 const std = @import("std");
 const RzValue = @import("rzvalue.zig").RzValue;
-const VmErr = @import("rzvalue.zig").VmErr;
+const RzErr = @import("rzvalue.zig").RzErr;
 
 pub const runtime = struct {
     var i: u16 = 0;
     var arena: std.heap.ArenaAllocator = .init(std.heap.page_allocator);
-    pub var global = [_]RzValue{RzValue.initErr(VmErr.name_not_found)} ** (std.math.maxInt(u16) + 1);
+    pub var global = [_]RzValue{RzValue.initErr(RzErr.name_not_found)} ** (std.math.maxInt(u16) + 1);
     pub var symbol: std.StringHashMap(u16) = .init(arena.allocator());
 
     pub fn setVariable(name: []const u8, value: RzValue) u16 {

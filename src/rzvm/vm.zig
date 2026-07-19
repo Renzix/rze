@@ -33,7 +33,6 @@ pub const rzvm = struct {
         self.pc = 0;
     }
     pub fn run(self: *rzvm, program: []const instruction) VmErr!void {
-        self.pc = 0;
         var inst = program[0];
         self.pc = 1;
         vm: switch (inst.op) {
