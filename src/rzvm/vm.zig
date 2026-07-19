@@ -9,7 +9,7 @@ const opcode = @import("bytecode.zig").opcode;
 const instruction = @import("bytecode.zig").instruction;
 const RzErr = @import("rzvalue.zig").RzErr;
 
-const runtime = @import("runtime.zig").runtime;
+const Runtime = @import("runtime.zig").Runtime;
 
 const VmErr = error{
     InvalidOpcode,
@@ -19,13 +19,16 @@ const VmErr = error{
 
 pub const rzvm = struct {
     registers: [256]u64,
+    runtime: Runtime,
     fp: u16,
     pc: u16,
     pub fn init() rzvm {
+        const rt = Runtime.init();
         return rzvm{
+            .registers = comptime ([_]u64{0} ** 256),
+            .runtime = rt,
             .pc = 0,
             .fp = 0,
-            .registers = comptime ([_]u64{0} ** 256),
         };
     }
     pub fn reset(self: *rzvm) void {
@@ -43,7 +46,7 @@ pub const rzvm = struct {
                 const args = inst.args.abx;
                 const loc = args.a;
                 const index = args.bx;
-                const val = runtime.global[index];
+                const val = self.runtime.global[index];
                 self.loadReg(val, loc);
 
                 inst = program[self.pc];
@@ -210,7 +213,7 @@ test "load and mov" {
     // defer rzvm.deinit();
     errdefer vm.dump();
     const r0 = 1001;
-    const vr0 = runtime.setVariable("Test", rzval.initInt(r0));
+    const vr0 = vm.runtime.setVariable("Test", rzval.initInt(r0));
     const bytecode = [_]instruction{
         instruction.iABx(.loadg, 0x00, vr0),
         instruction.iABC(.mov, 0x00, 0x01, 0),
@@ -225,13 +228,13 @@ test "addition" {
     errdefer vm.dump();
     // defer rzvm.deinit();
     const r0 = 1012;
-    const vr0 = runtime.setVariable("Var0", rzval.initInt(r0));
+    const vr0 = vm.runtime.setVariable("Var0", rzval.initInt(r0));
     const r1 = -5;
-    const vr1 = runtime.setVariable("Var1", rzval.initInt(r1));
+    const vr1 = vm.runtime.setVariable("Var1", rzval.initInt(r1));
     const r2 = -140737488355328;
-    const vr2 = runtime.setVariable("Var2", rzval.initInt(r2));
+    const vr2 = vm.runtime.setVariable("Var2", rzval.initInt(r2));
     const r3: f32 = 3.141595653589;
-    const vr3 = runtime.setVariable("Var3", rzval.initFloat(r3));
+    const vr3 = vm.runtime.setVariable("Var3", rzval.initFloat(r3));
     const bytecode = [_]instruction{
         instruction.iABx(.loadg, 0x00, vr0),
         instruction.iABx(.loadg, 0x01, vr1),
@@ -253,13 +256,13 @@ test "subtraction" {
     // defer rzvm.deinit();
     errdefer vm.dump();
     const r0 = 1000;
-    const vr0 = runtime.setVariable("Var0", rzval.initInt(r0));
+    const vr0 = vm.runtime.setVariable("Var0", rzval.initInt(r0));
     const r1 = 7;
-    const vr1 = runtime.setVariable("Var1", rzval.initInt(r1));
+    const vr1 = vm.runtime.setVariable("Var1", rzval.initInt(r1));
     const r2 = -140737488355328;
-    const vr2 = runtime.setVariable("Var2", rzval.initInt(r2));
+    const vr2 = vm.runtime.setVariable("Var2", rzval.initInt(r2));
     const r3: f32 = 2.5;
-    const vr3 = runtime.setVariable("Var3", rzval.initFloat(r3));
+    const vr3 = vm.runtime.setVariable("Var3", rzval.initFloat(r3));
     const bytecode = [_]instruction{
         instruction.iABx(.loadg, 0x00, vr0),
         instruction.iABx(.loadg, 0x01, vr1),
@@ -285,13 +288,13 @@ test "multiplication" {
     // defer rzvm.deinit();
     errdefer vm.dump();
     const r0 = 1000;
-    const vr0 = runtime.setVariable("Var0", rzval.initInt(r0));
+    const vr0 = vm.runtime.setVariable("Var0", rzval.initInt(r0));
     const r1 = 7;
-    const vr1 = runtime.setVariable("Var1", rzval.initInt(r1));
+    const vr1 = vm.runtime.setVariable("Var1", rzval.initInt(r1));
     const r2 = 1 << 24;
-    const vr2 = runtime.setVariable("Var2", rzval.initInt(r2));
+    const vr2 = vm.runtime.setVariable("Var2", rzval.initInt(r2));
     const r3: f32 = 2.5;
-    const vr3 = runtime.setVariable("Var3", rzval.initFloat(r3));
+    const vr3 = vm.runtime.setVariable("Var3", rzval.initFloat(r3));
     const bytecode = [_]instruction{
         instruction.iABx(.loadg, 0x00, vr0),
         instruction.iABx(.loadg, 0x01, vr1),
@@ -317,9 +320,9 @@ test "jmp, jz, jnz" {
     // defer rzvm.deinit();
     errdefer vm.dump();
     const r0 = 100;
-    const vr0 = runtime.setVariable("Var0", rzval.initInt(r0));
+    const vr0 = vm.runtime.setVariable("Var0", rzval.initInt(r0));
     const r1 = 200;
-    const vr1 = runtime.setVariable("Var1", rzval.initInt(r1));
+    const vr1 = vm.runtime.setVariable("Var1", rzval.initInt(r1));
     const bytecode = [_]instruction{
         instruction.iABx(.loadg, 0x00, vr0),
         instruction.iABx(.loadg, 0x01, vr1),
@@ -349,9 +352,9 @@ test "eql, neq " {
     // defer rzvm.deinit();
     errdefer vm.dump();
     const r0 = 100;
-    const vr0 = runtime.setVariable("Var0", rzval.initInt(r0));
+    const vr0 = vm.runtime.setVariable("Var0", rzval.initInt(r0));
     const r1 = 200;
-    const vr1 = runtime.setVariable("Var1", rzval.initInt(r1));
+    const vr1 = vm.runtime.setVariable("Var1", rzval.initInt(r1));
     const bytecode = [_]instruction{
         instruction.iABx(.loadg, 0x00, vr0),
         instruction.iABx(.loadg, 0x01, vr1),
