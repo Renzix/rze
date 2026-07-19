@@ -20,16 +20,17 @@ const VmErr = error{
 };
 
 // @TODO(Renzix): we need to check at LOAD TIME if args.sbx is out of bounds for jmps
+// @TODO(Renzix): Dynamic registers/globals/functions
 
 pub const rzvm = struct {
-    registers: [65536]u64,
+    registers: [1024]u64,
     runtime: Runtime,
     pc: u16,
     fp: u16,
     pub fn init() rzvm {
         const rt = Runtime.init();
         return rzvm{
-            .registers = comptime ([_]u64{0} ** 256),
+            .registers = comptime ([_]u64{0} ** 1024),
             .runtime = rt,
             .pc = 0,
             .fp = 0,
@@ -68,7 +69,7 @@ pub const rzvm = struct {
             },
             .mov => {
                 const args = inst.args.abc;
-                self.registers[args.b] = self.registers[args.a];
+                self.registers[args.b+self.fp] = self.registers[args.a+self.fp];
 
                 inst = program[self.pc];
                 self.pc += 1;
