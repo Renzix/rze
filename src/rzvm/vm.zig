@@ -13,6 +13,8 @@ const Runtime = @import("runtime.zig").Runtime;
 
 const str = @import("datatypes/string.zig");
 
+// @TODO(Renzix): Go through each of these and decide what to keep/remove and
+// then restructure what is a error?
 const VmErr = error{
     InvalidOpcode,
     Arity,
