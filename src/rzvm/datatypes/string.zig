@@ -9,7 +9,7 @@ pub const StringKind = enum(u8) {
 };
 pub const StringHeader = struct {
     kind: StringKind,
-    len: usize,
+    len: usize, // switch back to u32 for performance reasons
 
     pub fn slice(header: *const StringHeader) []const u8 {
         switch (header.kind) {
@@ -32,8 +32,9 @@ pub const AllocatedStr = struct {
     header: StringHeader,
 };
 
-pub inline fn CreateAllocatedStr(str: []const u8, allocator: std.mem.Allocator) *AllocatedStr {
-    // zig specific thing bc zig doesnt like when
+pub fn CreateAllocatedStr(str: []const u8, allocator: std.mem.Allocator) *AllocatedStr {
+    // zig specific thing bc zig doesnt like when you alloc more then the type needs
+    // and we align for performance reasons
     const raw = allocator.alignedAlloc(u8, .of(AllocatedStr),
                                        @sizeOf(StringHeader)+str.len) catch @panic("oom");
     const ret: *AllocatedStr = @ptrCast(raw);
@@ -43,6 +44,15 @@ pub inline fn CreateAllocatedStr(str: []const u8, allocator: std.mem.Allocator) 
     @memcpy(raw[@sizeOf(AllocatedStr)..], str[0..str.len]);
     return ret;
 }
+
+pub fn DestroyAllocatedStr(str: *AllocatedStr, allocator: std.mem.Allocator) void {
+    const total = @sizeOf(AllocatedStr) + str.header.len;
+    // u apparently need align bc C malloc stores the amount of bytes it handed
+    // you but zig doesnt and infers from the type.
+    const raw: [*]align(@alignOf(AllocatedStr)) u8 = @ptrCast(str);
+    allocator.free(raw[0..total]);
+}
+
 
 pub const StaticStr = struct {
     header: StringHeader,

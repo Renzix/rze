@@ -580,6 +580,8 @@ test "call, ret (executable)" {
     try std.testing.expectEqual(rzval.initErrCode(7).toU64(), vm.registers[0]);
 }
 
+//@TODO(Renzix): test "setio"
+
 test "concat" {
     var vm = rzvm.init(std.testing.io);
     // defer rzvm.deinit();
@@ -587,6 +589,7 @@ test "concat" {
 
     const allocator = std.heap.c_allocator;
     var r0 = str.CreateAllocatedStr("Hello my name is", allocator);
+    defer str.DestroyAllocatedStr(r0, allocator);
     const vr0 = vm.runtime.setVariable("stuff", rzval.initString(&r0.header));
     var r1 = str.CreateStaticStr(" renzix");
     const vr1 = vm.runtime.setVariable("stuff2", rzval.initString(&r1.header));
