@@ -67,4 +67,5 @@ pub const opcode = enum(u8) {
     ret = 20, // returns from function
     // misc
     setio = 21, // opcode(u8) + reg of fd(u8) + stream(u8) + unused(u8)
+    concat = 22, // opcode(u8) + start reg(u8) + reg count(u8) + reg of result(u8)
 };

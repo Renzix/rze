@@ -1,4 +1,6 @@
 
+const std = @import("std");
+
 pub const StringKind = enum(u8) {
     // inlineStr,  // max size of u64 for small strings, not here bc its in rzval
     staticStr,    // predefined constant strings
@@ -7,7 +9,7 @@ pub const StringKind = enum(u8) {
 };
 pub const StringHeader = struct {
     kind: StringKind,
-    len: u32,
+    len: usize,
 
     pub fn slice(header: *const StringHeader) []const u8 {
         switch (header.kind) {
@@ -30,6 +32,18 @@ pub const AllocatedStr = struct {
     header: StringHeader,
 };
 
+pub inline fn CreateAllocatedStr(str: []const u8, allocator: std.mem.Allocator) *AllocatedStr {
+    // zig specific thing bc zig doesnt like when
+    const raw = allocator.alignedAlloc(u8, .of(AllocatedStr),
+                                       @sizeOf(StringHeader)+str.len) catch @panic("oom");
+    const ret: *AllocatedStr = @ptrCast(raw);
+    ret.header = .{ .kind = .allocatedStr, .len = str.len };
+    // copy the string to the memory AFTER the AllocatedStr header.
+    // We do this so we can define our own string
+    @memcpy(raw[@sizeOf(AllocatedStr)..], str[0..str.len]);
+    return ret;
+}
+
 pub const StaticStr = struct {
     header: StringHeader,
     str: [*]const u8,
@@ -38,7 +52,7 @@ pub const StaticStr = struct {
 pub inline fn CreateStaticStr(comptime str: []const u8) StaticStr {
     return .{
         .header = .{ .kind = .staticStr, .len = str.len },
-        .str = str.ptr
+        .str = str.ptr,
     };
 }
 

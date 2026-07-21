@@ -123,6 +123,17 @@ pub const RzValue = packed struct(u64) {
             else => @panic("Turning type into float is not defined yet"),
         };
     }
+
+    pub inline fn asString(self: RzValue) []const u8 {
+        return blk: switch (self.type_info) {
+            TypeInfo.string => {
+                const header: *const str.StringHeader = @ptrFromInt(self.data);
+                break :blk header.slice();
+            },
+            else => @panic("Turning Type into string is not defined yet"),
+        };
+    }
+
     pub inline fn setf32(self: *RzValue, val: f32) void {
         self.data = @as(u48, @intCast(@as(u32, @bitCast(val))));
     }

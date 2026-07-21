@@ -34,16 +34,18 @@ const Pipe = struct {
 // @TODO(Renzix): Dynamic registers/globals/functions
 
 pub const rzvm = struct {
-    registers: [1024]u64,
+    registers: [512]u64,
     runtime: Runtime,
     pc: u16,
     fp: u16,
     pipe: Pipe,
     io: std.Io,
+    const allocator = std.heap.c_allocator;
+
     pub fn init(io: std.Io) rzvm {
         const rt = Runtime.init();
         return rzvm{
-            .registers = comptime ([_]u64{0} ** 1024),
+            .registers = comptime ([_]u64{0} ** 512),
             .runtime = rt,
             .pc = 0,
             .fp = 0,
@@ -293,6 +295,34 @@ pub const rzvm = struct {
                 self.pc += 1;
                 continue :vm inst.op;
             },
+            .concat => {
+                const args = inst.args.abc;
+                var totalmem: usize = 0;
+                for (args.a..(args.a+args.b)) |index| {
+                    const reg = self.peekReg(@as(u8, @intCast(index)));
+                    if (reg.type_info == .string) {
+                        totalmem += reg.asString().len;
+                    } else{
+                        unreachable;
+                        // break; // return rzval.initErr(???);
+                    }
+                }
+                const raw: []u8 = allocator.alloc(u8, totalmem) catch @panic("oom");
+                var strindex: usize = 0;
+                for (args.a..(args.a+args.b)) |regindex| {
+                    const reg = self.peekReg(@as(u8, @intCast(regindex)));
+                    const s = reg.asString();
+                    @memcpy(raw[strindex..strindex+s.len], s[0..s.len]);
+                    strindex += s.len;
+                }
+
+                const r0 = str.CreateAllocatedStr(raw, allocator);
+                self.loadReg(rzval.initString(&r0.header), args.c);
+
+                inst = program[self.pc];
+                self.pc += 1;
+                continue :vm inst.op;
+            },
             else => {
                 log("UNKNOWN OPCODE: {}\n", .{inst});
                 self.pc += 1; // opcode (u8)
@@ -308,13 +338,13 @@ pub const rzvm = struct {
         return @bitCast(self.registers[self.fp + loc]);
     }
 
-    pub fn dump(self: rzvm) void {
+    pub fn dump(self: rzvm, start: usize, end: usize) void {
         log("\n=== VM STATE DUMP ===\n", .{});
         log("Program Count (PC): {}\n", .{self.pc});
         log("Function Pointer (FP): {}\n", .{self.fp});
         log("=== Registers ===\n", .{});
 
-        for (self.registers, 0..) |reg, i| {
+        for (self.registers[start..end], start..end) |reg, i| {
             log("r{:0>3}: 0x{x:0>016}    ", .{ i, reg });
             if ((i + 1) % 4 == 0) {
                 log("\n", .{});
@@ -327,7 +357,7 @@ pub const rzvm = struct {
 
 test "Exit" {
     var vm = rzvm.init(std.testing.io);
-    errdefer vm.dump();
+    errdefer vm.dump(0, 12);
     // defer rzvm.deinit();
     const bytecode = [_]instruction{
         instruction.exit(),
@@ -339,7 +369,7 @@ test "Exit" {
 test "load and mov" {
     var vm = rzvm.init(std.testing.io);
     // defer rzvm.deinit();
-    errdefer vm.dump();
+    errdefer vm.dump(0, 12);
     const r0 = 1001;
     const vr0 = vm.runtime.setVariable("Test", rzval.initInt(r0));
     const bytecode = [_]instruction{
@@ -353,7 +383,7 @@ test "load and mov" {
 
 test "addition" {
     var vm = rzvm.init(std.testing.io);
-    errdefer vm.dump();
+    errdefer vm.dump(0, 12);
     // defer rzvm.deinit();
     const r0 = 1012;
     const vr0 = vm.runtime.setVariable("Var0", rzval.initInt(r0));
@@ -382,7 +412,7 @@ test "addition" {
 test "subtraction" {
     var vm = rzvm.init(std.testing.io);
     // defer rzvm.deinit();
-    errdefer vm.dump();
+    errdefer vm.dump(0, 12);
     const r0 = 1000;
     const vr0 = vm.runtime.setVariable("Var0", rzval.initInt(r0));
     const r1 = 7;
@@ -414,7 +444,7 @@ test "subtraction" {
 test "multiplication" {
     var vm = rzvm.init(std.testing.io);
     // defer rzvm.deinit();
-    errdefer vm.dump();
+    errdefer vm.dump(0, 12);
     const r0 = 1000;
     const vr0 = vm.runtime.setVariable("Var0", rzval.initInt(r0));
     const r1 = 7;
@@ -446,7 +476,7 @@ test "multiplication" {
 test "jmp, jz, jnz" {
     var vm = rzvm.init(std.testing.io);
     // defer rzvm.deinit();
-    errdefer vm.dump();
+    errdefer vm.dump(0, 12);
     const r0 = 100;
     const vr0 = vm.runtime.setVariable("Var0", rzval.initInt(r0));
     const r1 = 200;
@@ -478,7 +508,7 @@ test "jmp, jz, jnz" {
 test "eql, neq" {
     var vm = rzvm.init(std.testing.io);
     // defer rzvm.deinit();
-    errdefer vm.dump();
+    errdefer vm.dump(0, 12);
     const r0 = 100;
     const vr0 = vm.runtime.setVariable("Var0", rzval.initInt(r0));
     const r1 = 200;
@@ -503,10 +533,10 @@ test "eql, neq" {
 
 // @TODO(Renzix): Write test for ltn gtn ltne gtne =)
 
-test "call, ret" {
+test "call, ret (bytecode)" {
     var vm = rzvm.init(std.testing.io);
     // defer rzvm.deinit();
-    errdefer vm.dump();
+    errdefer vm.dump(0, 12);
     const r0 = vm.runtime.setFunction(5, 2, 3, 0);
     const vr0 = vm.runtime.setVariable("Func0", rzval.initFunction(r0));
     const r1 = 100;
@@ -528,10 +558,10 @@ test "call, ret" {
 }
 
 // requires sh to be present in the shell
-test "call, ret, executable" {
+test "call, ret (executable)" {
     var vm = rzvm.init(std.testing.io);
     // defer rzvm.deinit();
-    errdefer vm.dump();
+    errdefer vm.dump(0, 12);
     var s0 = str.CreateStaticStr("/bin/sh");
     const r0 = vm.runtime.setExecFunction(&s0.header, 2, 0);
     const vr0 = vm.runtime.setVariable("command", rzval.initFunction(r0));
@@ -539,8 +569,6 @@ test "call, ret, executable" {
     const vr1 = vm.runtime.setVariable("arg1", rzval.initString(&s1.header));
     const s2 = str.CreateStaticStr("exit 7");
     const vr2 = vm.runtime.setVariable("arg2", rzval.initString(&s2.header));
-    // const r0 = 200;
-    // const vr0 = vm.runtime.setVariable("Var1", rzval.initInt(r2));
     const bytecode = [_]instruction{
         instruction.iABx(.loadg, 0x00, vr0),
         instruction.iABx(.loadg, 0x01, vr1),
@@ -550,4 +578,28 @@ test "call, ret, executable" {
     };
     try vm.run(&bytecode);
     try std.testing.expectEqual(rzval.initErrCode(7).toU64(), vm.registers[0]);
+}
+
+test "concat" {
+    var vm = rzvm.init(std.testing.io);
+    // defer rzvm.deinit();
+    errdefer vm.dump(0, 12);
+
+    const allocator = std.heap.c_allocator;
+    var r0 = str.CreateAllocatedStr("Hello my name is", allocator);
+    const vr0 = vm.runtime.setVariable("stuff", rzval.initString(&r0.header));
+    var r1 = str.CreateStaticStr(" renzix");
+    const vr1 = vm.runtime.setVariable("stuff2", rzval.initString(&r1.header));
+    const bytecode = [_]instruction{
+        instruction.iABx(.loadg, 0x00, vr0),
+        instruction.iABx(.loadg, 0x01, vr1),
+        instruction.iABC(.concat, 0x00, 0x02, 0x02),
+        instruction.exit(),
+    };
+
+    try vm.run(&bytecode);
+
+    var answer = str.CreateStaticStr("Hello my name is renzix");
+    const response: rzval = @bitCast(vm.registers[2]);
+    try std.testing.expectEqualStrings(rzval.initString(&answer.header).asString(), response.asString());
 }
