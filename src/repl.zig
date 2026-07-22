@@ -66,6 +66,7 @@ pub const repl = struct {
         const bytecode = compiler.run(ast);
 
         var vm = v.rzvm.init(self.proc.io, compiler.runtime);
+        defer vm.deinit();
         _ = vm.run(bytecode.items) catch {
             vm.dump(0, 12);
             @panic("AAAAAHHHH");

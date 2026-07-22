@@ -36,28 +36,35 @@ const Pipe = struct {
 // @TODO(Renzix): Dynamic registers/globals/functions
 
 pub const rzvm = struct {
-    registers: [512]u64,
+    registers: []u64,
     runtime: Runtime,
     pc: u16,
     fp: u16,
     pipe: Pipe,
     io: std.Io,
+    top: u16,
     const allocator = std.heap.c_allocator;
 
     pub fn init(io: std.Io, rt: Runtime) rzvm {
         // const rt = Runtime.init();
         return rzvm{
-            .registers = comptime ([_]u64{0} ** 512),
+            .registers = allocator.alloc(u64, 256) catch @panic("oom"),
             .runtime = rt,
             .pc = 0,
             .fp = 0,
             .io = io,
             .pipe = .{},
+            .top = 0,
         };
     }
+    pub fn deinit(self: *rzvm) void {
+        allocator.free(self.registers);
+    }
+
     pub fn reset(self: *rzvm) void {
         self.pc = 0;
         self.fp = 0;
+        self.top = 0;
     }
     pub fn run(self: *rzvm, program: []const instruction) VmErr!void {
         var inst = program[0];
@@ -192,7 +199,7 @@ pub const rzvm = struct {
                         if (args.c != proto.argcount)
                             return VmErr.Arity;
                         if ((newfp + proto.impl.bytecode.framesize) > self.registers.len)
-                            return VmErr.StackOverflow;
+                            self.growStack(newfp + proto.impl.bytecode.framesize) catch return VmErr.StackOverflow;
 
                         self.registers[newfp-1] = rzval.initFrame(self.pc, self.fp).toU64();
 
@@ -340,6 +347,16 @@ pub const rzvm = struct {
         return @bitCast(self.registers[self.fp + loc]);
     }
 
+    pub inline fn growStack(self: *rzvm, newsize: u16) !void {
+        if (newsize <= self.registers.len) return;
+        const MAX: u16 = 65500;
+        if (newsize >= MAX) return VmErr.StackOverflow;
+        const oldsize = self.registers.len;
+        self.registers = allocator.realloc(self.registers,
+                                           @min(@as(usize, newsize*2), MAX)) catch @panic("oom");
+        @memset(self.registers[oldsize..], 0); // might delete, for safety and if i ever use gc???
+    }
+
     pub fn dump(self: rzvm, start: usize, end: usize) void {
         log("\n=== VM STATE DUMP ===\n", .{});
         log("Program Count (PC): {}\n", .{self.pc});
@@ -359,8 +376,8 @@ pub const rzvm = struct {
 
 test "Exit" {
     var vm = rzvm.init(std.testing.io);
+    defer rzvm.deinit();
     errdefer vm.dump(0, 12);
-    // defer rzvm.deinit();
     const bytecode = [_]instruction{
         instruction.exit(),
     };
@@ -370,7 +387,7 @@ test "Exit" {
 
 test "load and mov" {
     var vm = rzvm.init(std.testing.io);
-    // defer rzvm.deinit();
+    defer rzvm.deinit();
     errdefer vm.dump(0, 12);
     const r0 = 1001;
     const vr0 = vm.runtime.setVariable("Test", rzval.initInt(r0));
@@ -385,8 +402,8 @@ test "load and mov" {
 
 test "addition" {
     var vm = rzvm.init(std.testing.io);
+    defer rzvm.deinit();
     errdefer vm.dump(0, 12);
-    // defer rzvm.deinit();
     const r0 = 1012;
     const vr0 = vm.runtime.setVariable("Var0", rzval.initInt(r0));
     const r1 = -5;
@@ -413,7 +430,7 @@ test "addition" {
 
 test "subtraction" {
     var vm = rzvm.init(std.testing.io);
-    // defer rzvm.deinit();
+    defer rzvm.deinit();
     errdefer vm.dump(0, 12);
     const r0 = 1000;
     const vr0 = vm.runtime.setVariable("Var0", rzval.initInt(r0));
@@ -445,7 +462,7 @@ test "subtraction" {
 
 test "multiplication" {
     var vm = rzvm.init(std.testing.io);
-    // defer rzvm.deinit();
+    defer rzvm.deinit();
     errdefer vm.dump(0, 12);
     const r0 = 1000;
     const vr0 = vm.runtime.setVariable("Var0", rzval.initInt(r0));
@@ -477,7 +494,7 @@ test "multiplication" {
 
 test "jmp, jz, jnz" {
     var vm = rzvm.init(std.testing.io);
-    // defer rzvm.deinit();
+    defer rzvm.deinit();
     errdefer vm.dump(0, 12);
     const r0 = 100;
     const vr0 = vm.runtime.setVariable("Var0", rzval.initInt(r0));
@@ -509,7 +526,7 @@ test "jmp, jz, jnz" {
 
 test "eql, neq" {
     var vm = rzvm.init(std.testing.io);
-    // defer rzvm.deinit();
+    defer rzvm.deinit();
     errdefer vm.dump(0, 12);
     const r0 = 100;
     const vr0 = vm.runtime.setVariable("Var0", rzval.initInt(r0));
@@ -537,7 +554,7 @@ test "eql, neq" {
 
 test "call, ret (bytecode)" {
     var vm = rzvm.init(std.testing.io);
-    // defer rzvm.deinit();
+    defer rzvm.deinit();
     errdefer vm.dump(0, 12);
     const r0 = vm.runtime.setFunction(5, 2, 3);
     const vr0 = vm.runtime.setVariable("Func0", rzval.initFunction(r0));
@@ -562,7 +579,7 @@ test "call, ret (bytecode)" {
 // requires sh to be present in the shell
 test "call, ret (executable)" {
     var vm = rzvm.init(std.testing.io);
-    // defer rzvm.deinit();
+    defer rzvm.deinit();
     errdefer vm.dump(0, 12);
     var s0 = str.CreateStaticStr("/bin/sh");
     const r0 = vm.runtime.setExecFunction(&s0.header, 2);
@@ -586,7 +603,7 @@ test "call, ret (executable)" {
 
 test "concat" {
     var vm = rzvm.init(std.testing.io);
-    // defer rzvm.deinit();
+    defer rzvm.deinit();
     errdefer vm.dump(0, 12);
 
     const allocator = std.heap.c_allocator;
