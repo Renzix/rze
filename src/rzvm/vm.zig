@@ -6,7 +6,7 @@ const rzhelper = @import("rzvalue.zig");
 const typeinfo = @import("rzvalue.zig").TypeInfo;
 
 const opcode = @import("bytecode.zig").opcode;
-const instruction = @import("bytecode.zig").instruction;
+const inst = @import("bytecode.zig").instruction;
 const RzErr = @import("rzvalue.zig").RzErr;
 
 const Runtime = @import("runtime.zig").Runtime;
@@ -68,77 +68,77 @@ pub const rzvm = struct {
         self.fp = 0;
         self.top = 0;
     }
-    pub fn run(self: *rzvm, program: []const instruction) VmErr!void {
-        var inst = program[0];
+    pub fn run(self: *rzvm, program: []const inst) VmErr!void {
+        var ins = program[0];
         self.pc = 1;
-        vm: switch (inst.op) {
+        vm: switch (ins.op) {
             .exit => {
                 return;
             },
             .loadg => {
-                const args = inst.args.abx;
+                const args = ins.args.abx;
                 const loc = args.a;
                 const index = args.bx;
                 const val = self.runtime.global[index];
                 self.loadReg(val, loc);
 
-                inst = program[self.pc];
+                ins = program[self.pc];
                 self.pc += 1;
-                continue :vm inst.op;
+                continue :vm ins.op;
             },
             // @TODO(Renzix): Add loading .rzc files?
             // .loadc => {
-            //     const args = inst.args.abx;
+            //     const args = ins.args.abx;
             //     const loc = args.a;
             //     const index = args.bx;
             //     const val = self.comptime.constants[index];
             //     self.loadReg(val, loc);
 
-            //     inst = program[self.pc];
+            //     ins = program[self.pc];
             //     self.pc += 1;
             //     continue :vm inst.op;
             // },
             .loadb => {
-                const args = inst.args.abx;
+                const args = ins.args.abx;
                 const val = rzval.initInt(@as(i48, args.bx));
                 self.loadReg(val, args.a);
 
-                inst = program[self.pc];
+                ins = program[self.pc];
                 self.pc += 1;
-                continue :vm inst.op;
+                continue :vm ins.op;
             },
             .argstart => {
-                const args = inst.args.abc;
+                const args = ins.args.abc;
                 const functionregister = args.a;
                 self.top = self.fp + functionregister + 1;
 
-                inst = program[self.pc];
+                ins = program[self.pc];
                 self.pc += 1;
-                continue :vm inst.op;
+                continue :vm ins.op;
             },
             .argpush => {
-                const args = inst.args.abx;
+                const args = ins.args.abx;
                 const index = args.bx;
                 const val = self.runtime.global[index];
                 self.growStack(self.top + 1) catch return VmErr.StackOverflow;
                 self.registers[self.top] = @bitCast(val);
                 self.top+=1;
 
-                inst = program[self.pc];
+                ins = program[self.pc];
                 self.pc += 1;
-                continue :vm inst.op;
+                continue :vm ins.op;
             },
             .mov => {
-                const args = inst.args.abc;
+                const args = ins.args.abc;
                 self.registers[args.b+self.fp] = self.registers[args.a+self.fp];
 
-                inst = program[self.pc];
+                ins = program[self.pc];
                 self.pc += 1;
-                continue :vm inst.op;
+                continue :vm ins.op;
             },
             // @TODO(Renzix): Collapse add/sub/mul into one comptime value
             .add => {
-                const args = inst.args.abc;
+                const args = ins.args.abc;
                 const a = self.peekReg(args.a);
                 const b = self.peekReg(args.b);
 
@@ -146,12 +146,12 @@ pub const rzvm = struct {
                 const loc3 = args.c;
                 self.loadReg(c, loc3);
 
-                inst = program[self.pc];
+                ins = program[self.pc];
                 self.pc += 1;
-                continue :vm inst.op;
+                continue :vm ins.op;
             },
             .sub => {
-                const args = inst.args.abc;
+                const args = ins.args.abc;
                 const a = self.peekReg(args.a);
                 const b = self.peekReg(args.b);
 
@@ -159,12 +159,12 @@ pub const rzvm = struct {
                 const loc3 = args.c;
                 self.loadReg(c, loc3);
 
-                inst = program[self.pc];
+                ins = program[self.pc];
                 self.pc += 1;
-                continue :vm inst.op;
+                continue :vm ins.op;
             },
             .mul => {
-                const args = inst.args.abc;
+                const args = ins.args.abc;
                 const a = self.peekReg(args.a);
                 const b = self.peekReg(args.b);
 
@@ -172,41 +172,41 @@ pub const rzvm = struct {
                 const loc3 = args.c;
                 self.loadReg(c, loc3);
 
-                inst = program[self.pc];
+                ins = program[self.pc];
                 self.pc += 1;
-                continue :vm inst.op;
+                continue :vm ins.op;
             },
             // @TODO(Renzix): Collapse jmp/jz/jnz into one comptime value
             .jmp => {
-                const args = inst.args.asbx;
+                const args = ins.args.asbx;
                 self.pc = @intCast(@as(i32, self.pc) + args.sbx);
 
-                inst = program[self.pc];
+                ins = program[self.pc];
                 self.pc += 1;
-                continue :vm inst.op;
+                continue :vm ins.op;
             },
             .jz => {
-                const args = inst.args.asbx;
+                const args = ins.args.asbx;
                 const a = self.peekReg(args.a);
                 if ((a.nullable==true) or (a.data==0))
                     self.pc = @intCast(@as(i32, self.pc) + args.sbx);
 
-                inst = program[self.pc];
+                ins = program[self.pc];
                 self.pc += 1;
-                continue :vm inst.op;
+                continue :vm ins.op;
             },
             .jnz => {
-                const args = inst.args.asbx;
+                const args = ins.args.asbx;
                 const a = self.peekReg(args.a);
                 if (!((a.nullable==true) or (a.data==0)))
                     self.pc = @intCast(@as(i32, self.pc) + args.sbx);
 
-                inst = program[self.pc];
+                ins = program[self.pc];
                 self.pc += 1;
-                continue :vm inst.op;
+                continue :vm ins.op;
             },
             .call => {
-                const args = inst.args.abc;
+                const args = ins.args.abc;
                 const func = self.peekReg(args.a);
                 const varargs = (args.c==0xFF);
                 // @TODO(Renzix): Dont ignore args.b (this is # of return values)
@@ -272,12 +272,12 @@ pub const rzvm = struct {
                         self.loadReg(rzval.initErrCode(rc), args.a);
                     },
                 }
-                inst = program[self.pc];
+                ins = program[self.pc];
                 self.pc += 1;
-                continue :vm inst.op;
+                continue :vm ins.op;
             },
             .ret => {
-                const args = inst.args.abc;
+                const args = ins.args.abc;
                 if (self.fp == 0) return; // if you return
 
                 const frame: rzval = @bitCast(self.registers[self.fp - 1]);
@@ -291,13 +291,13 @@ pub const rzvm = struct {
                 self.pc = @truncate(frame.data >> 16);
                 self.fp = @truncate(frame.data >>  0);
 
-                inst = program[self.pc];
+                ins = program[self.pc];
                 self.pc += 1;
-                continue :vm inst.op;
+                continue :vm ins.op;
             },
             inline .ltn, .gtn, .gtne,
                    .ltne, .eql, .neq => |op| {
-                const args = inst.args.abc;
+                const args = ins.args.abc;
                 const a = self.peekReg(args.a);
                 const b = self.peekReg(args.b);
 
@@ -313,12 +313,12 @@ pub const rzvm = struct {
                     self.pc += 1;
                 }
 
-                inst = program[self.pc];
+                ins = program[self.pc];
                 self.pc += 1;
-                continue :vm inst.op;
+                continue :vm ins.op;
             },
             .setio => {
-                const args = inst.args.abc;
+                const args = ins.args.abc;
                 const a = self.peekReg(args.a);
                 switch (args.b) {
                     0x00 => self.pipe.stdin = a,
@@ -327,12 +327,12 @@ pub const rzvm = struct {
                     else => return VmErr.InvalidStream,
                 }
 
-                inst = program[self.pc];
+                ins = program[self.pc];
                 self.pc += 1;
-                continue :vm inst.op;
+                continue :vm ins.op;
             },
             .concat => {
-                const args = inst.args.abc;
+                const args = ins.args.abc;
                 var totalmem: usize = 0;
                 for (args.a..(args.a+args.b)) |index| {
                     const reg = self.peekReg(@as(u8, @intCast(index)));
@@ -355,12 +355,12 @@ pub const rzvm = struct {
                 const r0 = str.CreateAllocatedStr(raw, allocator);
                 self.loadReg(rzval.initString(&r0.header), args.c);
 
-                inst = program[self.pc];
+                ins = program[self.pc];
                 self.pc += 1;
-                continue :vm inst.op;
+                continue :vm ins.op;
             },
             else => {
-                log("UNKNOWN OPCODE: {}\n", .{inst});
+                log("UNKNOWN OPCODE: {}\n", .{ins});
                 self.pc += 1; // opcode (u8)
                 return VmErr.InvalidOpcode;
             },
@@ -407,8 +407,8 @@ test "Exit" {
     var vm = rzvm.init(std.testing.io, rt);
     defer vm.deinit();
     errdefer vm.dump(0, 12);
-    const bytecode = [_]instruction{
-        instruction.exit(),
+    const bytecode = [_]inst{
+        inst.exit(),
     };
     try vm.run(&bytecode);
     std.debug.assert(vm.pc == 1);
@@ -421,10 +421,10 @@ test "load and mov" {
     errdefer vm.dump(0, 12);
     const r0 = 1001;
     const vr0 = vm.runtime.setVariable("Test", rzval.initInt(r0));
-    const bytecode = [_]instruction{
-        instruction.iABx(.loadg, 0x00, vr0),
-        instruction.iABC(.mov, 0x00, 0x01, 0),
-        instruction.exit(),
+    const bytecode = [_]inst{
+        inst.iABx(.loadg, 0x00, vr0),
+        inst.iABC(.mov, 0x00, 0x01, 0),
+        inst.exit(),
     };
     try vm.run(&bytecode);
     try std.testing.expectEqual(rzval.initInt(r0).toU64(), vm.registers[1]);
@@ -443,15 +443,15 @@ test "addition" {
     const vr2 = vm.runtime.setVariable("Var2", rzval.initInt(r2));
     const r3: f32 = 3.141595653589;
     const vr3 = vm.runtime.setVariable("Var3", rzval.initFloat(r3));
-    const bytecode = [_]instruction{
-        instruction.iABx(.loadg, 0x00, vr0),
-        instruction.iABx(.loadg, 0x01, vr1),
-        instruction.iABx(.loadg, 0x02, vr2),
-        instruction.iABx(.loadg, 0x03, vr3),
-        instruction.iABC(.add, 0x00, 0x01, 0x04),
-        instruction.iABC(.add, 0x01, 0x02, 0x05),
-        instruction.iABC(.add, 0x03, 0x03, 0x06),
-        instruction.exit(),
+    const bytecode = [_]inst{
+        inst.iABx(.loadg, 0x00, vr0),
+        inst.iABx(.loadg, 0x01, vr1),
+        inst.iABx(.loadg, 0x02, vr2),
+        inst.iABx(.loadg, 0x03, vr3),
+        inst.iABC(.add, 0x00, 0x01, 0x04),
+        inst.iABC(.add, 0x01, 0x02, 0x05),
+        inst.iABC(.add, 0x03, 0x03, 0x06),
+        inst.exit(),
     };
     try vm.run(&bytecode);
     try std.testing.expectEqual(rzval.initInt(r0 + r1).toU64(), vm.registers[4]);
@@ -472,17 +472,17 @@ test "subtraction" {
     const vr2 = vm.runtime.setVariable("Var2", rzval.initInt(r2));
     const r3: f32 = 2.5;
     const vr3 = vm.runtime.setVariable("Var3", rzval.initFloat(r3));
-    const bytecode = [_]instruction{
-        instruction.iABx(.loadg, 0x00, vr0),
-        instruction.iABx(.loadg, 0x01, vr1),
-        instruction.iABx(.loadg, 0x02, vr2),
-        instruction.iABx(.loadg, 0x03, vr3),
-        instruction.iABC(.sub, 0x00, 0x01, 0x04),
-        instruction.iABC(.sub, 0x01, 0x00, 0x05),
-        instruction.iABC(.sub, 0x02, 0x01, 0x06),
-        instruction.iABC(.sub, 0x00, 0x03, 0x07),
-        instruction.iABC(.sub, 0x03, 0x03, 0x08),
-        instruction.exit(),
+    const bytecode = [_]inst{
+        inst.iABx(.loadg, 0x00, vr0),
+        inst.iABx(.loadg, 0x01, vr1),
+        inst.iABx(.loadg, 0x02, vr2),
+        inst.iABx(.loadg, 0x03, vr3),
+        inst.iABC(.sub, 0x00, 0x01, 0x04),
+        inst.iABC(.sub, 0x01, 0x00, 0x05),
+        inst.iABC(.sub, 0x02, 0x01, 0x06),
+        inst.iABC(.sub, 0x00, 0x03, 0x07),
+        inst.iABC(.sub, 0x03, 0x03, 0x08),
+        inst.exit(),
     };
     try vm.run(&bytecode);
     try std.testing.expectEqual(rzval.initInt(r0 - r1).toU64(), vm.registers[4]);
@@ -505,17 +505,17 @@ test "multiplication" {
     const vr2 = vm.runtime.setVariable("Var2", rzval.initInt(r2));
     const r3: f32 = 2.5;
     const vr3 = vm.runtime.setVariable("Var3", rzval.initFloat(r3));
-    const bytecode = [_]instruction{
-        instruction.iABx(.loadg, 0x00, vr0),
-        instruction.iABx(.loadg, 0x01, vr1),
-        instruction.iABx(.loadg, 0x02, vr2),
-        instruction.iABx(.loadg, 0x03, vr3),
-        instruction.iABC(.mul, 0x00, 0x01, 0x04),
-        instruction.iABC(.mul, 0x02, 0x02, 0x05),
-        instruction.iABC(.mul, 0x00, 0x03, 0x06),
-        instruction.iABC(.mul, 0x01, 0x03, 0x07),
-        instruction.iABC(.mul, 0x03, 0x03, 0x08),
-        instruction.exit(),
+    const bytecode = [_]inst{
+        inst.iABx(.loadg, 0x00, vr0),
+        inst.iABx(.loadg, 0x01, vr1),
+        inst.iABx(.loadg, 0x02, vr2),
+        inst.iABx(.loadg, 0x03, vr3),
+        inst.iABC(.mul, 0x00, 0x01, 0x04),
+        inst.iABC(.mul, 0x02, 0x02, 0x05),
+        inst.iABC(.mul, 0x00, 0x03, 0x06),
+        inst.iABC(.mul, 0x01, 0x03, 0x07),
+        inst.iABC(.mul, 0x03, 0x03, 0x08),
+        inst.exit(),
     };
     try vm.run(&bytecode);
     try std.testing.expectEqual(rzval.initInt(r0 * r1).toU64(), vm.registers[4]);
@@ -534,21 +534,21 @@ test "jmp, jz, jnz" {
     const vr0 = vm.runtime.setVariable("Var0", rzval.initInt(r0));
     const r1 = 200;
     const vr1 = vm.runtime.setVariable("Var1", rzval.initInt(r1));
-    const bytecode = [_]instruction{
-        instruction.iABx(.loadg, 0x00, vr0),
-        instruction.iABx(.loadg, 0x01, vr1),
-        instruction.iAsBx(.jmp, undefined, 0x01),
-        instruction.iABC(.invalid, 0x00, 0x01, 0x01), // this should be skipped
-        instruction.iABC(.add, 0x00, 0x01, 0x02),
-        instruction.iAsBx(.jz, 0xFF, 0x01), // should jump next cmd
-        instruction.iABC(.invalid, 0x00, 0x01, 0x03),
-        instruction.iAsBx(.jz, 0x00, 0x01), // should not jump next cmd
-        instruction.iABC(.add, 0x00, 0x01, 0x04),
-        instruction.iAsBx(.jnz, 0xFF, 0x01), // should not jump next cmd
-        instruction.iABC(.add, 0x00, 0x01, 0x05),
-        instruction.iAsBx(.jnz, 0x00, 0x01), // should jump next cmd
-        instruction.iABC(.invalid, 0x00, 0x01, 0x06),
-        instruction.exit(),
+    const bytecode = [_]inst{
+        inst.iABx(.loadg, 0x00, vr0),
+        inst.iABx(.loadg, 0x01, vr1),
+        inst.iAsBx(.jmp, undefined, 0x01),
+        inst.iABC(.invalid, 0x00, 0x01, 0x01), // this should be skipped
+        inst.iABC(.add, 0x00, 0x01, 0x02),
+        inst.iAsBx(.jz, 0xFF, 0x01), // should jump next cmd
+        inst.iABC(.invalid, 0x00, 0x01, 0x03),
+        inst.iAsBx(.jz, 0x00, 0x01), // should not jump next cmd
+        inst.iABC(.add, 0x00, 0x01, 0x04),
+        inst.iAsBx(.jnz, 0xFF, 0x01), // should not jump next cmd
+        inst.iABC(.add, 0x00, 0x01, 0x05),
+        inst.iAsBx(.jnz, 0x00, 0x01), // should jump next cmd
+        inst.iABC(.invalid, 0x00, 0x01, 0x06),
+        inst.exit(),
     };
     try vm.run(&bytecode);
     try std.testing.expectEqual(rzval.initInt(r0 + r1).toU64(), vm.registers[2]);
@@ -567,18 +567,18 @@ test "eql, neq" {
     const vr0 = vm.runtime.setVariable("Var0", rzval.initInt(r0));
     const r1 = 200;
     const vr1 = vm.runtime.setVariable("Var1", rzval.initInt(r1));
-    const bytecode = [_]instruction{
-        instruction.iABx(.loadg, 0x00, vr0),
-        instruction.iABx(.loadg, 0x01, vr1),
-        instruction.iABC(.eql, 0x01, 0x01, undefined),
-        instruction.iABC(.invalid, 0x00, 0x00, 0x00),
-        instruction.iABC(.eql, 0x00, 0x01, undefined),
-        instruction.iABC(.add, 0x00, 0x01, 0x02),
-        instruction.iABC(.neq, 0x01, 0x01, undefined),
-        instruction.iABC(.add, 0x00, 0x01, 0x03),
-        instruction.iABC(.neq, 0x00, 0x01, undefined),
-        instruction.iABC(.invalid, 0x00, 0x00, 0x00),
-        instruction.exit(),
+    const bytecode = [_]inst{
+        inst.iABx(.loadg, 0x00, vr0),
+        inst.iABx(.loadg, 0x01, vr1),
+        inst.iABC(.eql, 0x01, 0x01, undefined),
+        inst.iABC(.invalid, 0x00, 0x00, 0x00),
+        inst.iABC(.eql, 0x00, 0x01, undefined),
+        inst.iABC(.add, 0x00, 0x01, 0x02),
+        inst.iABC(.neq, 0x01, 0x01, undefined),
+        inst.iABC(.add, 0x00, 0x01, 0x03),
+        inst.iABC(.neq, 0x00, 0x01, undefined),
+        inst.iABC(.invalid, 0x00, 0x00, 0x00),
+        inst.exit(),
     };
     try vm.run(&bytecode);
     try std.testing.expectEqual(rzval.initInt(r0 + r1).toU64(), vm.registers[2]);
@@ -598,14 +598,14 @@ test "call, ret (bytecode)" {
     const vr1 = vm.runtime.setVariable("Var0", rzval.initInt(r1));
     const r2 = 200;
     const vr2 = vm.runtime.setVariable("Var1", rzval.initInt(r2));
-    const bytecode = [_]instruction{
-        instruction.iABx(.loadg, 0x00, vr0),
-        instruction.iABx(.loadg, 0x01, vr1),
-        instruction.iABx(.loadg, 0x02, vr2),
-        instruction.iABC(.call, 0x00, 0x01, 0x02),
-        instruction.exit(),
-        instruction.iABC(.add, 0x00, 0x01, 0x02),
-        instruction.iABC(.ret, 0x02, 0x01, 0x00),
+    const bytecode = [_]inst{
+        inst.iABx(.loadg, 0x00, vr0),
+        inst.iABx(.loadg, 0x01, vr1),
+        inst.iABx(.loadg, 0x02, vr2),
+        inst.iABC(.call, 0x00, 0x01, 0x02),
+        inst.exit(),
+        inst.iABC(.add, 0x00, 0x01, 0x02),
+        inst.iABC(.ret, 0x02, 0x01, 0x00),
     };
     try vm.run(&bytecode);
     try std.testing.expectEqual(rzval.initInt(r1 + r2).toU64(), vm.registers[0]);
@@ -625,12 +625,12 @@ test "call, ret (executable)" {
     const vr1 = vm.runtime.setVariable("arg1", rzval.initString(&s1.header));
     const s2 = str.CreateStaticStr("exit 7");
     const vr2 = vm.runtime.setVariable("arg2", rzval.initString(&s2.header));
-    const bytecode = [_]instruction{
-        instruction.iABx(.loadg, 0x00, vr0),
-        instruction.iABx(.loadg, 0x01, vr1),
-        instruction.iABx(.loadg, 0x02, vr2),
-        instruction.iABC(.call, 0x00, 0x01, 0x02),
-        instruction.exit(),
+    const bytecode = [_]inst{
+        inst.iABx(.loadg, 0x00, vr0),
+        inst.iABx(.loadg, 0x01, vr1),
+        inst.iABx(.loadg, 0x02, vr2),
+        inst.iABC(.call, 0x00, 0x01, 0x02),
+        inst.exit(),
     };
     try vm.run(&bytecode);
     try std.testing.expectEqual(rzval.initErrCode(7).toU64(), vm.registers[0]);
@@ -650,11 +650,11 @@ test "concat" {
     const vr0 = vm.runtime.setVariable("stuff", rzval.initString(&r0.header));
     var r1 = str.CreateStaticStr(" renzix");
     const vr1 = vm.runtime.setVariable("stuff2", rzval.initString(&r1.header));
-    const bytecode = [_]instruction{
-        instruction.iABx(.loadg, 0x00, vr0),
-        instruction.iABx(.loadg, 0x01, vr1),
-        instruction.iABC(.concat, 0x00, 0x02, 0x02),
-        instruction.exit(),
+    const bytecode = [_]inst{
+        inst.iABx(.loadg, 0x00, vr0),
+        inst.iABx(.loadg, 0x01, vr1),
+        inst.iABC(.concat, 0x00, 0x02, 0x02),
+        inst.exit(),
     };
 
     try vm.run(&bytecode);
