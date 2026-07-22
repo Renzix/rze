@@ -65,7 +65,12 @@ pub const opcode = enum(u8) {
     jnz = 18, // jump if 0
     call = 19, // opcode(u8) + reg for funtion ptr(u8) + return count(u8) + argcount(u8)
     ret = 20, // returns from function
+    // var args
+    argstart = 23, // start a variadic arguments function
+    argpush = 24, // push a variable onto var args
+    argexpand = 25, // expand var specifically for unquoted shell variables (pushes multiple args)
     // misc
     setio = 21, // opcode(u8) + reg of fd(u8) + stream(u8) + unused(u8)
     concat = 22, // opcode(u8) + start reg(u8) + reg count(u8) + reg of result(u8)
+
 };

@@ -17,13 +17,14 @@ const str = @import("datatypes/string.zig");
 // then restructure what is a error?
 const VmErr = error{
     InvalidOpcode,
-    Arity,
+    IncorrectArgCount,
     StackOverflow,
     CallingUncallable,
     ExpectedFrame,
     ExpectedString,
     IncorrectReturnValueCount,
     InvalidStream,
+    TooManyVarArgs,
 };
 
 const Pipe = struct {
@@ -46,9 +47,10 @@ pub const rzvm = struct {
     const allocator = std.heap.c_allocator;
 
     pub fn init(io: std.Io, rt: Runtime) rzvm {
-        // const rt = Runtime.init();
+        const regs = allocator.alloc(u64, 256) catch @panic("oom");
+        @memset(regs, 0);
         return rzvm{
-            .registers = allocator.alloc(u64, 256) catch @panic("oom"),
+            .registers = regs,
             .runtime = rt,
             .pc = 0,
             .fp = 0,
@@ -100,6 +102,27 @@ pub const rzvm = struct {
                 const args = inst.args.abx;
                 const val = rzval.initInt(@as(i48, args.bx));
                 self.loadReg(val, args.a);
+
+                inst = program[self.pc];
+                self.pc += 1;
+                continue :vm inst.op;
+            },
+            .argstart => {
+                const args = inst.args.abc;
+                const functionregister = args.a;
+                self.top = self.fp + functionregister + 1;
+
+                inst = program[self.pc];
+                self.pc += 1;
+                continue :vm inst.op;
+            },
+            .argpush => {
+                const args = inst.args.abx;
+                const index = args.bx;
+                const val = self.runtime.global[index];
+                self.growStack(self.top + 1) catch return VmErr.StackOverflow;
+                self.registers[self.top] = @bitCast(val);
+                self.top+=1;
 
                 inst = program[self.pc];
                 self.pc += 1;
@@ -185,6 +208,7 @@ pub const rzvm = struct {
             .call => {
                 const args = inst.args.abc;
                 const func = self.peekReg(args.a);
+                const varargs = (args.c==0xFF);
                 // @TODO(Renzix): Dont ignore args.b (this is # of return values)
                 if (func.type_info != typeinfo.function)
                     return VmErr.CallingUncallable;
@@ -197,7 +221,7 @@ pub const rzvm = struct {
                     .bytecode => {
                         const newfp: u16 = self.fp + args.a + 1;
                         if (args.c != proto.argcount)
-                            return VmErr.Arity;
+                            return VmErr.IncorrectArgCount;
                         if ((newfp + proto.impl.bytecode.framesize) > self.registers.len)
                             self.growStack(newfp + proto.impl.bytecode.framesize) catch return VmErr.StackOverflow;
 
@@ -215,7 +239,10 @@ pub const rzvm = struct {
                             return VmErr.IncorrectReturnValueCount;
                         var argv: [256][]const u8 = undefined;
                         argv[0] = proto.impl.exec.slice();
-                        for (0..args.c) |i| {
+                        const base: u16 = self.fp + args.a;
+                        const argcount: u16 = if (!varargs) args.c else (self.top - (base + 1));
+                        if (argcount + 1 > argv.len) return VmErr.TooManyVarArgs;
+                        for (0..argcount) |i| {
                             const param = self.peekReg(args.a + 1 + @as(u8, @intCast(i)));
                             if (param.type_info != .string) {
                                 return VmErr.ExpectedString;
@@ -227,7 +254,7 @@ pub const rzvm = struct {
                         // check self.pipe values and ensure they are valid .fd's
 
                         var child = std.process.spawn(self.io, .{
-                            .argv   = argv[0..args.c+1],
+                            .argv   = argv[0..argcount+1],
                             .stdout = rzhelper.toStdIo(self.pipe.stdout),
                             .stdin  = rzhelper.toStdIo(self.pipe.stdin),
                             .stderr = rzhelper.toStdIo(self.pipe.stderr),
@@ -339,11 +366,12 @@ pub const rzvm = struct {
             },
         }
     }
+
     pub fn loadReg(self: *rzvm, val: rzval, loc: u8) void {
         self.registers[self.fp + loc] = @bitCast(val);
     }
 
-    pub fn peekReg(self: *rzvm, loc: u8) rzval {
+    pub fn peekReg(self: *rzvm, loc: u16) rzval {
         return @bitCast(self.registers[self.fp + loc]);
     }
 
@@ -375,8 +403,9 @@ pub const rzvm = struct {
 };
 
 test "Exit" {
-    var vm = rzvm.init(std.testing.io);
-    defer rzvm.deinit();
+    const rt = Runtime.init();
+    var vm = rzvm.init(std.testing.io, rt);
+    defer vm.deinit();
     errdefer vm.dump(0, 12);
     const bytecode = [_]instruction{
         instruction.exit(),
@@ -386,8 +415,9 @@ test "Exit" {
 }
 
 test "load and mov" {
-    var vm = rzvm.init(std.testing.io);
-    defer rzvm.deinit();
+    const rt = Runtime.init();
+    var vm = rzvm.init(std.testing.io, rt);
+    defer vm.deinit();
     errdefer vm.dump(0, 12);
     const r0 = 1001;
     const vr0 = vm.runtime.setVariable("Test", rzval.initInt(r0));
@@ -401,8 +431,9 @@ test "load and mov" {
 }
 
 test "addition" {
-    var vm = rzvm.init(std.testing.io);
-    defer rzvm.deinit();
+    const rt = Runtime.init();
+    var vm = rzvm.init(std.testing.io, rt);
+    defer vm.deinit();
     errdefer vm.dump(0, 12);
     const r0 = 1012;
     const vr0 = vm.runtime.setVariable("Var0", rzval.initInt(r0));
@@ -429,8 +460,9 @@ test "addition" {
 }
 
 test "subtraction" {
-    var vm = rzvm.init(std.testing.io);
-    defer rzvm.deinit();
+    const rt = Runtime.init();
+    var vm = rzvm.init(std.testing.io, rt);
+    defer vm.deinit();
     errdefer vm.dump(0, 12);
     const r0 = 1000;
     const vr0 = vm.runtime.setVariable("Var0", rzval.initInt(r0));
@@ -461,8 +493,9 @@ test "subtraction" {
 }
 
 test "multiplication" {
-    var vm = rzvm.init(std.testing.io);
-    defer rzvm.deinit();
+    const rt = Runtime.init();
+    var vm = rzvm.init(std.testing.io, rt);
+    defer vm.deinit();
     errdefer vm.dump(0, 12);
     const r0 = 1000;
     const vr0 = vm.runtime.setVariable("Var0", rzval.initInt(r0));
@@ -493,8 +526,9 @@ test "multiplication" {
 }
 
 test "jmp, jz, jnz" {
-    var vm = rzvm.init(std.testing.io);
-    defer rzvm.deinit();
+    const rt = Runtime.init();
+    var vm = rzvm.init(std.testing.io, rt);
+    defer vm.deinit();
     errdefer vm.dump(0, 12);
     const r0 = 100;
     const vr0 = vm.runtime.setVariable("Var0", rzval.initInt(r0));
@@ -525,8 +559,9 @@ test "jmp, jz, jnz" {
 }
 
 test "eql, neq" {
-    var vm = rzvm.init(std.testing.io);
-    defer rzvm.deinit();
+    const rt = Runtime.init();
+    var vm = rzvm.init(std.testing.io, rt);
+    defer vm.deinit();
     errdefer vm.dump(0, 12);
     const r0 = 100;
     const vr0 = vm.runtime.setVariable("Var0", rzval.initInt(r0));
@@ -553,8 +588,9 @@ test "eql, neq" {
 // @TODO(Renzix): Write test for ltn gtn ltne gtne =)
 
 test "call, ret (bytecode)" {
-    var vm = rzvm.init(std.testing.io);
-    defer rzvm.deinit();
+    const rt = Runtime.init();
+    var vm = rzvm.init(std.testing.io, rt);
+    defer vm.deinit();
     errdefer vm.dump(0, 12);
     const r0 = vm.runtime.setFunction(5, 2, 3);
     const vr0 = vm.runtime.setVariable("Func0", rzval.initFunction(r0));
@@ -578,8 +614,9 @@ test "call, ret (bytecode)" {
 
 // requires sh to be present in the shell
 test "call, ret (executable)" {
-    var vm = rzvm.init(std.testing.io);
-    defer rzvm.deinit();
+    const rt = Runtime.init();
+    var vm = rzvm.init(std.testing.io, rt);
+    defer vm.deinit();
     errdefer vm.dump(0, 12);
     var s0 = str.CreateStaticStr("/bin/sh");
     const r0 = vm.runtime.setExecFunction(&s0.header, 2);
@@ -602,8 +639,9 @@ test "call, ret (executable)" {
 //@TODO(Renzix): test "setio"
 
 test "concat" {
-    var vm = rzvm.init(std.testing.io);
-    defer rzvm.deinit();
+    const rt = Runtime.init();
+    var vm = rzvm.init(std.testing.io, rt);
+    defer vm.deinit();
     errdefer vm.dump(0, 12);
 
     const allocator = std.heap.c_allocator;
@@ -625,3 +663,5 @@ test "concat" {
     const response: rzval = @bitCast(vm.registers[2]);
     try std.testing.expectEqualStrings(rzval.initString(&answer.header).asString(), response.asString());
 }
+
+// @TODO(Renzix): Test var args with argstart and argpush
