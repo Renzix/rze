@@ -44,8 +44,8 @@ pub const rzvm = struct {
     io: std.Io,
     const allocator = std.heap.c_allocator;
 
-    pub fn init(io: std.Io) rzvm {
-        const rt = Runtime.init();
+    pub fn init(io: std.Io, rt: Runtime) rzvm {
+        // const rt = Runtime.init();
         return rzvm{
             .registers = comptime ([_]u64{0} ** 512),
             .runtime = rt,
@@ -539,7 +539,7 @@ test "call, ret (bytecode)" {
     var vm = rzvm.init(std.testing.io);
     // defer rzvm.deinit();
     errdefer vm.dump(0, 12);
-    const r0 = vm.runtime.setFunction(5, 2, 3, 0);
+    const r0 = vm.runtime.setFunction(5, 2, 3);
     const vr0 = vm.runtime.setVariable("Func0", rzval.initFunction(r0));
     const r1 = 100;
     const vr1 = vm.runtime.setVariable("Var0", rzval.initInt(r1));
@@ -565,7 +565,7 @@ test "call, ret (executable)" {
     // defer rzvm.deinit();
     errdefer vm.dump(0, 12);
     var s0 = str.CreateStaticStr("/bin/sh");
-    const r0 = vm.runtime.setExecFunction(&s0.header, 2, 0);
+    const r0 = vm.runtime.setExecFunction(&s0.header, 2);
     const vr0 = vm.runtime.setVariable("command", rzval.initFunction(r0));
     const s1 = str.CreateStaticStr("-c");
     const vr1 = vm.runtime.setVariable("arg1", rzval.initString(&s1.header));

@@ -5,7 +5,6 @@ const StringHeader = @import("datatypes/string.zig").StringHeader;
 
 pub const Proto = struct {
     argcount: u8,
-    flags: u8,
     impl: union(enum) {
         bytecode: struct {
             startpc: u16,
@@ -40,6 +39,12 @@ pub const Runtime = struct {
         return self.vi-1;
     }
 
+    pub fn intern(self: *Runtime, value: RzValue) u16 {
+        self.global[self.vi] = value;
+        self.vi += 1;
+        return self.vi-1;
+    }
+
     pub fn getVariable(self: *Runtime, name: []const u8) ?RzValue {
         if (self.symbol.get(name)) |loc| {
             return self.global[loc];
@@ -47,19 +52,19 @@ pub const Runtime = struct {
         return null;
     }
 
-    pub fn setFunction(self: *Runtime, startpc: u16, argcount: u8, framesize: u8, flags: u8) u16 {
+    pub fn setFunction(self: *Runtime, startpc: u16, argcount: u8, framesize: u8) u16 {
         self.functions[self.fi] = .{
             .impl = .{ .bytecode = .{ .startpc = startpc, .framesize = framesize} },
             .argcount = argcount,
-            .flags = flags };
+        };
         self.fi += 1;
         return self.fi-1;
     }
-    pub fn setExecFunction(self: *Runtime, bin: *StringHeader, argcount: u8, flags: u8) u16 {
+    pub fn setExecFunction(self: *Runtime, bin: *StringHeader, argcount: u8) u16 {
         self.functions[self.fi] = .{
             .impl = .{ .exec = bin },
             .argcount = argcount,
-            .flags = flags };
+        };
         self.fi += 1;
         return self.fi-1;
     }
