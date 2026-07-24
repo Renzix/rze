@@ -11,45 +11,66 @@ pub const Proto = struct {
             framesize: u8,
         },
         // native: *const NativeFn,
-        exec: *StringHeader,
+        exec: *StringHeader, // @TODO(Renzix): Remove now that string is callable??
     },
 };
 pub const Runtime = struct {
     fi: u16,
-    vi: u16,
-    global: [std.math.maxInt(u16)+1]RzValue,
-    functions: [1024]Proto, // replace with closures???
+    gi: u16,
+    ci: u16,
+    constants: [10000]RzValue,
+    variables: [std.math.maxInt(u16)+1]RzValue,
     symbol: std.StringHashMap(u16),
+    functions: [1024]Proto, // replace with closures???
     const allocator = std.heap.c_allocator;
 
     pub fn init() Runtime {
         return .{
             .fi = 0,
-            .vi = 0,
-            .global = [_]RzValue{RzValue.initErr(RzErr.name_not_found)} ** (std.math.maxInt(u16) + 1),
+            .gi = 0,
+            .ci = 0,
+            .constants = [_]RzValue{RzValue.initErr(RzErr.name_not_found)} ** 10000,
+            .variables = [_]RzValue{RzValue.initErr(RzErr.name_not_found)} ** (std.math.maxInt(u16) + 1),
             .symbol = .init(allocator),
             .functions = undefined,
         };
     }
 
-    pub fn setVariable(self: *Runtime, name: []const u8, value: RzValue) u16 {
-        self.symbol.put(name, self.vi) catch @panic("oom, no space for symbol");
-        self.global[self.vi] = value;
-        self.vi += 1;
-        return self.vi-1;
+    pub fn addGlobal(self: *Runtime, name: []const u8, value: RzValue) u16 {
+        self.symbol.put(name, self.gi) catch @panic("oom, no space for symbol");
+        self.variables[self.gi] = value;
+        self.gi += 1;
+        return self.gi-1;
     }
 
-    pub fn intern(self: *Runtime, value: RzValue) u16 {
-        self.global[self.vi] = value;
-        self.vi += 1;
-        return self.vi-1;
-    }
-
-    pub fn getVariable(self: *Runtime, name: []const u8) ?RzValue {
+    pub fn getGlobal(self: *Runtime, name: []const u8) ?RzValue {
         if (self.symbol.get(name)) |loc| {
-            return self.global[loc];
+            return self.variables[loc];
         }
         return null;
+    }
+
+    pub fn findGlobal(self: *Runtime, name: []const u8) ?u16 {
+        if (self.symbol.get(name)) |loc| {
+            return loc;
+        }
+        return null;
+    }
+
+    pub fn reserveGlobal(self: *Runtime, name: []const u8) u16 {
+        self.symbol.put(name, self.gi) catch @panic("oom, no space for symbol");
+        self.gi += 1;
+        return self.gi-1;
+    }
+
+    pub fn addConstant(self: *Runtime, value: RzValue) u16 {
+        self.constants[self.ci] = value;
+        self.ci += 1;
+        return self.ci-1;
+    }
+
+    pub fn getConstant(self: *Runtime, loc: u16) RzValue {
+        return self.constants[loc];
     }
 
     pub fn setFunction(self: *Runtime, startpc: u16, argcount: u8, framesize: u8) u16 {

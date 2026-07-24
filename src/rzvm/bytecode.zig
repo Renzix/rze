@@ -8,6 +8,8 @@
 // iABx has one 8 bit argument and one 16 bit argument, useful if you want
 // to act on a single register
 //
+const TypeInfo = @import("rzvalue.zig").TypeInfo;
+
 pub const instruction = packed struct(u32) {
     op: opcode,
     args: packed union {
@@ -34,6 +36,9 @@ pub const instruction = packed struct(u32) {
     pub fn iAsBx(op: opcode, a: u8, sbx: i16) instruction {
         return .{ .op = op, .args = .{ .asbx = .{ .a = a, .sbx = sbx } } };
     }
+    pub fn resolve(reg: u8, typ: TypeInfo) instruction {
+        return .{ .op = .resolve, .args = .{ .abc = .{ .a = reg, .b = @intFromEnum(typ), .c = undefined } } };
+    }
     pub fn exit() instruction {
         return .{ .op = .exit, .args = .{ .abc = .{ .a = undefined, .b = undefined, .c = undefined } } };
     }
@@ -46,6 +51,7 @@ pub const opcode = enum(u8) {
     loadg = 2, // opcode(u8) + reg(u8) + index(u16)
     loadc = 3, // opcode(u8) + reg(u8) + ???
     loadb = 4, // opcode(u8) + reg(u8) + value(u16) // always sets int
+    storeg = 28, // opcode(u8) + reg(u8) + index(u16)
     mov  = 5, // opcode(u8) + from(u8) + to(u8)
     // math
     add  = 6, // opcode(u8) + rega(u8) + regb(u8) + regc(u8)
@@ -66,11 +72,39 @@ pub const opcode = enum(u8) {
     call = 19, // opcode(u8) + reg for funtion ptr(u8) + return count(u8) + argcount(u8)
     ret = 20, // returns from function
     // var args
-    argstart = 23, // start a variadic arguments function
-    argpush = 24, // push a variable onto var args
-    argexpand = 25, // expand var specifically for unquoted shell variables (pushes multiple args)
+    argstart = 21, // start a variadic arguments function
+    argvpush = 22, // push a variable onto var args
+    argcpush = 23, // push a variable onto var args
+    argexpand = 24, // expand var specifically for unquoted shell variables (pushes multiple args)
     // misc
-    setio = 21, // opcode(u8) + reg of fd(u8) + stream(u8) + unused(u8)
-    concat = 22, // opcode(u8) + start reg(u8) + reg count(u8) + reg of result(u8)
+    setio = 25, // opcode(u8) + reg of fd(u8) + stream(u8) + unused(u8)
+    concat = 26, // opcode(u8) + start reg(u8) + reg count(u8) + reg of result(u8)
+    resolve = 27, // opcode(u8) + reg(u8) + type(u8) + unused(u8)
 
 };
+
+const std = @import("std");
+const log = @import("std").log.debug;
+
+// helper function
+pub fn dump(bytecode: std.ArrayList(instruction)) void {
+    for (bytecode.items) |ins| {
+        switch (ins.op) {
+            .loadg, .loadc, .storeg => log(".{s:<10} r{} var[{}]", .{@tagName(ins.op), ins.args.abx.a, ins.args.abx.bx}),
+            .concat => {
+                log(".{s:<10} {}-{} res{}", .{@tagName(ins.op), ins.args.abc.a, ins.args.abc.a+ins.args.abc.b, ins.args.abc.c});
+            },
+            .resolve => {
+                const t: TypeInfo = @enumFromInt(ins.args.abc.b);
+                log(".{s:<10} r{} {}", .{@tagName(ins.op), ins.args.abc.a, t});
+            },
+            .call => {
+                log(".{s:<10} r{} ret{} arg{}", .{@tagName(ins.op), ins.args.abc.a, ins.args.abc.b, ins.args.abc.c});
+            },
+            .exit => log(".{s:<10}", .{@tagName(ins.op)}),
+            else => log(".{s:<10} 0b{b:0>8} 0b{b:0>8} 0b{b:0>8}",
+                        .{@tagName(ins.op), ins.args.abc.a, ins.args.abc.b, ins.args.abc.c}),
+
+        }
+    }
+}

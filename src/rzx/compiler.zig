@@ -3,6 +3,7 @@ const log = @import("std").log.debug;
 const ast = @import("ast.zig");
 
 const inst  = @import("../rzvm/bytecode.zig").instruction;
+const bc  = @import("../rzvm/bytecode.zig");
 const str  = @import("../rzvm/datatypes/string.zig");
 const Runtime  = @import("../rzvm/runtime.zig").Runtime;
 const rzval = @import("../rzvm/rzvalue.zig").RzValue;
@@ -15,6 +16,7 @@ pub const Compiler = struct{
     bytecode: std.ArrayList(inst),
     runtime: Runtime,
     reg: u8,
+    variableindex: u16,
     const allocator = std.heap.c_allocator;
     pub fn init() ?Compiler {
         const rt = Runtime.init();
@@ -24,6 +26,7 @@ pub const Compiler = struct{
             .bytecode = .empty,
             .runtime = rt,
             .reg = 0,
+            .variableindex = 0,
         };
     }
 
@@ -37,6 +40,7 @@ pub const Compiler = struct{
         }
         log("{}", .{self.bytecode});
         self.emit(inst.exit());
+        bc.dump(self.bytecode);
         return self.bytecode;
     }
 
@@ -59,31 +63,69 @@ pub const Compiler = struct{
 
     pub fn compileSimpleCommand(self: *Compiler, sc: ast.SimpleCommand) void {
         if (sc.cmd!=null) {
-            self.compileExecutable(sc.cmd.?);
+            const exec = self.compileExecutable(sc.cmd.?);
             for (sc.args.items) |arg| {
-                self.compileWord(arg);
+                _ = self.compileWord(arg);
             }
-            self.emit(inst.iABC(.call, 0x00, 0x01, @intCast(sc.args.items.len)));
+            self.emit(inst.iABC(.call, exec, 0x01, @intCast(sc.args.items.len)));
+            // @TODO(Renzix): Redirection
         } else {
-            // @TODO(Renzix): assignments
+            for (sc.assignments.items) |assign| {
+                log("name: {s}", .{assign.name});
+                var reg = self.reg;
+                if (assign.value) |val| {
+                    _ = self.compileWord(val);
+                } else {
+                    // var=
+                    var sX = str.CreateAllocatedStr("", allocator);
+                    var rzv = rzval.initString(&sX.header);
+                    rzv.nullable = true;
+                    const rX = self.runtime.addConstant(rzv);
+                    reg = self.newReg();
+                    self.emit(inst.iABx(.loadc, reg, rX));
+                }
+                const v = self.runtime.reserveGlobal(assign.name);
+                self.emit(inst.iABx(.storeg, reg, v));
+            }
         }
     }
 
-    pub fn compileExecutable(self: *Compiler, words: std.ArrayList(ast.Word)) void {
-        for (words.items) |word| {
-            var s0 = str.CreateAllocatedStr(word.literal.text, allocator);
-            const r0 = self.runtime.setExecFunction(&s0.header, 2);
-            const vr0 = self.runtime.intern(rzval.initFunction(r0));
-            self.emit(inst.iABx(.loadg, self.newReg(), vr0));
-        }
+    pub fn compileExecutable(self: *Compiler, words: std.ArrayList(ast.Word)) u8 {
+        const reg = self.compileWord(words);
+        self.emit(inst.resolve(reg, .function));
+        return reg;
     }
 
-    pub fn compileWord(self: *Compiler, words: std.ArrayList(ast.Word)) void {
+    pub fn compileWord(self: *Compiler, words: std.ArrayList(ast.Word)) u8 {
+        // only use 1 reg by the end
+        const initReg = self.reg;
         for (words.items) |word| {
-            var sx = str.CreateAllocatedStr(word.literal.text, allocator);
-            const vrx = self.runtime.intern(rzval.initString(&sx.header));
-            self.emit(inst.iABx(.loadg, self.newReg(), vrx));
+            switch (word) {
+                .literal => {
+                    //@TODO(Renzix): if 2 of these happen in a row you can combine them
+                    var sX = str.CreateAllocatedStr(word.literal.text, allocator);
+                    const rX = self.runtime.addConstant(rzval.initString(&sX.header));
+                    const reg = self.newReg();
+                    self.emit(inst.iABx(.loadc, reg, rX));
+                },
+                .expand => {
+                    const reg = self.newReg();
+                    if(self.runtime.findGlobal(word.expand.name)) |slot| {
+                        self.emit(inst.iABx(.loadg, reg, slot));
+                    } else {
+                        var sX = str.CreateAllocatedStr("", allocator);
+                        var rzv = rzval.initString(&sX.header);
+                        rzv.nullable = true;
+                        const rX = self.runtime.addConstant(rzv);
+                        self.emit(inst.iABx(.loadc, reg, rX));
+                    }
+                },
+            }
         }
+        if (words.items.len > 1)
+            self.emit(inst.iABC(.concat, initReg, @as(u8, @intCast(words.items.len)), initReg));
+        self.reg = initReg+1;
+        return self.reg-1;
     }
 
     pub fn emit(self: *Compiler, ins: inst) void {
@@ -93,5 +135,10 @@ pub const Compiler = struct{
     pub fn newReg(self: *Compiler) u8 {
         self.reg += 1;
         return self.reg-1;
+    }
+
+    pub fn newVariable(self: *Compiler) u16 {
+        self.variableindex += 1;
+        return self.variableindex-1;
     }
 };

@@ -79,25 +79,34 @@ pub const rzvm = struct {
                 const args = ins.args.abx;
                 const loc = args.a;
                 const index = args.bx;
-                const val = self.runtime.global[index];
+                const val = self.runtime.variables[index];
                 self.loadReg(val, loc);
 
                 ins = program[self.pc];
                 self.pc += 1;
                 continue :vm ins.op;
             },
-            // @TODO(Renzix): Add loading .rzc files?
-            // .loadc => {
-            //     const args = ins.args.abx;
-            //     const loc = args.a;
-            //     const index = args.bx;
-            //     const val = self.comptime.constants[index];
-            //     self.loadReg(val, loc);
+            .storeg => {
+                const args = ins.args.abx;
+                const loc = args.a;
+                const index = args.bx;
+                self.runtime.variables[index] = self.peekReg(loc);
 
-            //     ins = program[self.pc];
-            //     self.pc += 1;
-            //     continue :vm inst.op;
-            // },
+                ins = program[self.pc];
+                self.pc += 1;
+                continue :vm ins.op;
+            },
+            .loadc => {
+                const args = ins.args.abx;
+                const loc = args.a;
+                const index = args.bx;
+                const val = self.runtime.constants[index];
+                self.loadReg(val, loc);
+
+                ins = program[self.pc];
+                self.pc += 1;
+                continue :vm ins.op;
+            },
             .loadb => {
                 const args = ins.args.abx;
                 const val = rzval.initInt(@as(i48, args.bx));
@@ -116,10 +125,15 @@ pub const rzvm = struct {
                 self.pc += 1;
                 continue :vm ins.op;
             },
-            .argpush => {
+            inline .argvpush, .argcpush => |op| {
                 const args = ins.args.abx;
                 const index = args.bx;
-                const val = self.runtime.global[index];
+                const val = switch (op) {
+                    .argvpush => self.runtime.variables[index],
+                    .argcpush => self.runtime.constants[index],
+                    else => unreachable,
+                };
+                // grow the stack IF it needs it
                 self.growStack(self.top + 1) catch return VmErr.StackOverflow;
                 self.registers[self.top] = @bitCast(val);
                 self.top+=1;
@@ -276,6 +290,17 @@ pub const rzvm = struct {
                 self.pc += 1;
                 continue :vm ins.op;
             },
+            .resolve => {
+                const args = ins.args.abc;
+                const a = self.peekReg(args.a);
+                std.debug.assert(a.type_info == .string);
+                const r0 = self.runtime.setExecFunction(a.asStringHeader(), undefined);
+                self.loadReg(rzval.initFunction(r0), args.a);
+
+                ins = program[self.pc];
+                self.pc += 1;
+                continue :vm ins.op;
+            },
             .ret => {
                 const args = ins.args.abc;
                 if (self.fp == 0) return; // if you return
@@ -339,6 +364,7 @@ pub const rzvm = struct {
                     if (reg.type_info == .string) {
                         totalmem += reg.asString().len;
                     } else{
+                        log("String!", .{});
                         unreachable;
                         // break; // return rzval.initErr(???);
                     }
@@ -354,6 +380,7 @@ pub const rzvm = struct {
 
                 const r0 = str.CreateAllocatedStr(raw, allocator);
                 self.loadReg(rzval.initString(&r0.header), args.c);
+                // log("STR: {any}\n",.{self.peekReg(args.c).asString()});
 
                 ins = program[self.pc];
                 self.pc += 1;

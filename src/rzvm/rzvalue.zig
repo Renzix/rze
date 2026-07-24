@@ -124,6 +124,13 @@ pub const RzValue = packed struct(u64) {
         };
     }
 
+    pub inline fn asStringHeader(self: RzValue) *str.StringHeader {
+        return switch (self.type_info) {
+            TypeInfo.string => @ptrFromInt(self.data),
+            else => @panic("Turning Type into string is not defined yet"),
+        };
+    }
+
     pub inline fn asString(self: RzValue) []const u8 {
         return blk: switch (self.type_info) {
             TypeInfo.string => {
