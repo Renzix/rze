@@ -22,6 +22,11 @@ const helper = @import("token.zig");
 // @TODO(Renzix): ${Parameter:-Expansions}
 // @TODO(Renzix): $(()) arithmatic (wtf... a parser within a parser????)
 
+const ParseErr = error{
+    Unimplemented,
+    ExpectedFileName,
+};
+
 // we parse and lex at the same time for shell!!!
 // Heavily based off of the grammar rules
 // HERE https://pubs.opengroup.org/onlinepubs/9799919799/
@@ -134,17 +139,18 @@ pub const Parser = struct {
             .redirects = undefined,
         };
         var found = false;
-        if(self.parseCmdPrefix(&sc)) {
+        const prefix = self.parseCmdPrefix(&sc) catch return null;
+        if(prefix) {
             found = true;
         }
         if(self.parseCmdName(&sc)) {
             found = true;
         }
-        if(self.parseCmdSuffix(&sc)) {}
+        _ = self.parseCmdSuffix(&sc) catch return null;
         if (found) return sc else return null;
     }
 
-    fn parseCmdPrefix(self: *Parser, sc: *ast.SimpleCommand) bool {
+    fn parseCmdPrefix(self: *Parser, sc: *ast.SimpleCommand) !bool {
         var found = false;
         while(true) {
             _ = self.skipWhitespace();
@@ -154,7 +160,9 @@ pub const Parser = struct {
                 sc.assignments.append(allocator, assign) catch @panic("oom");
                 found=true; continue;
             }
-            if (self.parseIoRedirect()) { found=true; continue; }
+            const ioredir = try self.parseIoRedirect();
+            if (ioredir) { found=true; continue; }
+
             break;
         }
         return found;
@@ -166,30 +174,32 @@ pub const Parser = struct {
         return cmd_name!=null;
     }
 
-    fn parseCmdSuffix(self: *Parser, sc: *ast.SimpleCommand) bool {
+    fn parseCmdSuffix(self: *Parser, sc: *ast.SimpleCommand) !bool {
         var found = false;
         while(true) {
             _ = self.skipWhitespace();
             if (self.lexWord()) |arg| {
                 sc.args.append(allocator, arg) catch @panic("oom");
-                found=true; continue;
+                found=true;
+                continue;
             }
-            if (self.parseIoRedirect()) { found=true; continue; }
+            const ioredir = try self.parseIoRedirect();
+            if (ioredir) { found=true; continue; }
             break;
         }
         return found;
     }
 
     // @TODO(DeBruno): Add io_here and maybe io_location
-    fn parseIoRedirect(self: *Parser) bool {
+    fn parseIoRedirect(self: *Parser) !bool {
         // var found = false;
         _ = self.skipWhitespace();
         // self.lexIoNumber();
-        _ = self.lexIoFile();
+        _ = try self.lexIoFile();
         return false;
     }
 
-    fn lexIoFile(self: *Parser) ?ast.IoRedirection {
+    fn lexIoFile(self: *Parser) !?ast.IoRedirection {
         if (self.i >= self.code.len) return null;
         switch(self.code[self.i]) {
             '>' => {
@@ -197,24 +207,29 @@ pub const Parser = struct {
                     switch (self.code[self.i+1]) {
                         '&' => { // GREATAND >&
                             // @TODO(Renzix): Implement
-                            @panic("GREATAND");
+                            log("GREATAND >& is unimplemented", .{});
+                            return ParseErr.Unimplemented;
                         },
                         '>' => { // DGREAT >>
                             // @TODO(Renzix): Implement
-                            @panic("DGREAT");
+                            log("DGREAT >> is unimplemented", .{});
+                            return ParseErr.Unimplemented;
                         },
                         '|' => { // CLOBBER >|
                             // @TODO(Renzix): Implement
-                            @panic("Clobber");
+                            log("CLOBBER >| is unimplemented", .{});
+                            return ParseErr.Unimplemented;
                         },
                         else => { // GREATTHAN '>' or invalid
                             log("Found GREATTHAN: >", .{});
                             self.i += 1;
                             _ = self.skipWhitespace();
-                            // expected filename, io_rediect with no filename
+
                             const file = self.lexWord();
-                            if(file==null)
-                                @panic("expected filename, io_redirect with no filename");
+                            if(file==null) {
+                                log("io_redirect > failed with no/invalid filename", .{});
+                                return ParseErr.ExpectedFileName;
+                            }
                             return .{
                                 .typ = ast.Redirect.GREATTHAN,
                                 .filename = file.?
@@ -223,17 +238,20 @@ pub const Parser = struct {
                     }
                 } else {
                     // parse error, io_redirect with no filename
-                    @panic("parse error, io_redirect with no filename");
+                    log("io_redirect > failed with no filename, found eof", .{});
+                    return ParseErr.ExpectedFileName;
                 }
             },
             '<' => {
                 if (self.i+1 < self.code.len) {
                     switch (self.code[self.i+1]) {
                         '&' => { // LESSAND <&
-                            @panic("LESSAND");
+                            log("LESSTHAN <& is unimplemented", .{});
+                            return ParseErr.Unimplemented;
                         },
                         '>' => { // LESSGREAT <>
-                            @panic("LESSGREAT");
+                            log("LESSGREAT <> is unimplemented", .{});
+                            return ParseErr.Unimplemented;
                         },
                         else => { // LESSTHAN '<' or invalid
                             log("Found LESSTHAN: <", .{});
@@ -241,14 +259,20 @@ pub const Parser = struct {
                             _ = self.skipWhitespace();
                             // expected filename, io_rediect with no filename
                             const file = self.lexWord();
-                            if(file==null)
-                                @panic("expected filename, io_redirect with no filename");
+                            if(file==null) {
+                                log("io_redirect < failed with no/invalid filename", .{});
+                                return ParseErr.ExpectedFileName;
+                            }
                             return .{
                                 .typ = ast.Redirect.LESSTHAN,
                                 .filename = file.?
                             };
                         }
                     }
+                } else {
+                    // parse error, io_redirect with no filename
+                    log("io_redirect < failed with no filename, found eof", .{});
+                    return ParseErr.ExpectedFileName;
                 }
             },
             else => {
