@@ -270,8 +270,6 @@ pub const rzvm = struct {
                             argv[1+i] = header.slice();
                         }
 
-                        // check self.pipe values and ensure they are valid .fd's
-
                         const child = std.process.spawn(self.io, .{
                             .argv   = argv[0..argcount+1],
                             .stdout = rzhelper.toStdIo(self.execcontent.pipe.stdout),
@@ -280,7 +278,9 @@ pub const rzvm = struct {
                         }) catch @panic("process couldnt start for some reason");
 
                         self.execcontent.pending.append(allocator, child) catch @panic("oom");
-                        // self.loadReg(rzval.init, args.a); // @TODO(Renzix): pass back index???
+                        std.debug.assert(self.execcontent.pending.items.len<=256);
+                        const i: i48 = @intCast(self.execcontent.pending.items.len-1);
+                        self.loadReg(rzval.initInt(i), args.a);
                     },
                 }
                 ins = program[self.pc];
