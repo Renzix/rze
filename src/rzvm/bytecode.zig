@@ -78,6 +78,9 @@ pub const opcode = enum(u8) {
     argexpand = 24, // expand var specifically for unquoted shell variables (pushes multiple args)
     // misc
     setio = 25, // opcode(u8) + reg of fd(u8) + stream(u8) + unused(u8)
+    mkpipe = 29,
+    pipeclose = 30,
+    wait = 31,
     concat = 26, // opcode(u8) + start reg(u8) + reg count(u8) + reg of result(u8)
     resolve = 27, // opcode(u8) + reg(u8) + type(u8) + unused(u8)
 

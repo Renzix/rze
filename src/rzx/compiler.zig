@@ -50,7 +50,63 @@ pub const Compiler = struct{
     }
 
     pub fn compilePipeline(self: *Compiler, pipeline: ast.Pipeline) void {
-        self.compileCommand(pipeline.cmds.items[0]);
+        var pipefds: [128]u8 = undefined;
+        var pipefdcount: u16 = 0;
+        var pipein: u8 = undefined;
+        const initReg = self.reg;
+        for (pipeline.cmds.items, 0..) |pl, pindex| {
+            // create fd for stdin and stdout?
+            const fds: [2]u8 = blk: {
+                if (pipeline.cmds.items.len==1) {  // real real
+                    const stdinreg = self.newReg();
+                    const stdinfd = self.runtime.stdinfd;
+                    self.emit(inst.iABx(.loadc, stdinreg, stdinfd));
+                    const stdoutreg = self.newReg();
+                    const stdoutfd = self.runtime.stdoutfd;
+                    self.emit(inst.iABx(.loadc, stdoutreg, stdoutfd));
+                    break :blk .{ stdinreg, stdoutreg };
+                }
+                else if((pipeline.cmds.items.len-1)==pindex) { // pipe real
+                    const stdoutreg = self.newReg();
+                    const stdoutfd = self.runtime.stdoutfd;
+                    self.emit(inst.iABx(.loadc, stdoutreg, stdoutfd));
+                    break :blk .{ pipein, stdoutreg };
+                } else if(pindex==0) { // real pipe
+                    pipein = self.newReg(); // pass to next?
+                    const pipeout = self.newReg();
+                    self.emit(inst.iABC(.mkpipe, pipein, pipeout, undefined));
+                    pipefds[pipefdcount] = pipein;
+                    pipefdcount += 1;
+                    pipefds[pipefdcount] = pipeout;
+                    pipefdcount += 1;
+                    const stdinreg = self.newReg();
+                    const stdinfd = self.runtime.stdinfd;
+                    self.emit(inst.iABx(.loadc, stdinreg, stdinfd));
+                    break :blk .{ stdinreg, pipeout };
+                } else { // pipe pipe
+                    const lastpipein = pipein;
+                    pipein = self.newReg(); // pass to next?
+                    const pipeout = self.newReg();
+                    self.emit(inst.iABC(.mkpipe, pipein, pipeout, undefined));
+                    pipefds[pipefdcount] = pipein;
+                    pipefdcount += 1;
+                    pipefds[pipefdcount] = pipeout;
+                    pipefdcount += 1;
+                    break :blk .{ lastpipein, pipeout };
+                }
+            };
+            self.emit(inst.iABC(.setio, fds[0], 0x00, undefined)); // stdin
+            self.emit(inst.iABC(.setio, fds[1], 0x01, undefined)); // stdout
+            self.compileCommand(pl);
+        }
+
+        // @TODO(Renzix): close 3 at a time
+        for (0..pipefdcount) |pipeindex| {
+            self.emit(inst.iABC(.pipeclose, pipefds[pipeindex], undefined, undefined));
+        }
+
+        self.emit(inst.iABC(.wait, undefined, undefined, undefined));
+        self.reg = initReg;
     }
 
     pub fn compileCommand(self: *Compiler, cmd: ast.Command) void {

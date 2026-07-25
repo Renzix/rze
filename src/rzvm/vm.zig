@@ -27,6 +27,11 @@ const VmErr = error{
     TooManyVarArgs,
 };
 
+const ExecContent = struct {
+    pipe: Pipe,
+    pending: std.ArrayList(std.process.Child),
+};
+
 const Pipe = struct {
     stdin: ?rzval = null,
     stdout: ?rzval = null,
@@ -39,9 +44,9 @@ const Pipe = struct {
 pub const rzvm = struct {
     registers: []u64,
     runtime: Runtime,
+    execcontent: ExecContent,
     pc: u16,
     fp: u16,
-    pipe: Pipe,
     io: std.Io,
     top: u16,
     const allocator = std.heap.c_allocator;
@@ -52,10 +57,10 @@ pub const rzvm = struct {
         return rzvm{
             .registers = regs,
             .runtime = rt,
+            .execcontent = .{ .pending = .empty, .pipe = .{} },
             .pc = 0,
             .fp = 0,
             .io = io,
-            .pipe = .{},
             .top = 0,
         };
     }
@@ -267,23 +272,15 @@ pub const rzvm = struct {
 
                         // check self.pipe values and ensure they are valid .fd's
 
-                        var child = std.process.spawn(self.io, .{
+                        const child = std.process.spawn(self.io, .{
                             .argv   = argv[0..argcount+1],
-                            .stdout = rzhelper.toStdIo(self.pipe.stdout),
-                            .stdin  = rzhelper.toStdIo(self.pipe.stdin),
-                            .stderr = rzhelper.toStdIo(self.pipe.stderr),
+                            .stdout = rzhelper.toStdIo(self.execcontent.pipe.stdout),
+                            .stdin  = rzhelper.toStdIo(self.execcontent.pipe.stdin),
+                            .stderr = rzhelper.toStdIo(self.execcontent.pipe.stderr),
                         }) catch @panic("process couldnt start for some reason");
 
-                        // @TODO(Renzix): Make async and dont wait
-                        const term = child.wait(self.io)
-                            catch @panic("process panic'd!");
-
-                        const rc: u8 = switch (term) {
-                            .exited => |code| code,
-                            .signal => |sig| 128 + @as(u8, @intCast(@intFromEnum(sig))),
-                            .stopped, .unknown => 1,
-                        };
-                        self.loadReg(rzval.initErrCode(rc), args.a);
+                        self.execcontent.pending.append(allocator, child) catch @panic("oom");
+                        // self.loadReg(rzval.init, args.a); // @TODO(Renzix): pass back index???
                     },
                 }
                 ins = program[self.pc];
@@ -346,11 +343,55 @@ pub const rzvm = struct {
                 const args = ins.args.abc;
                 const a = self.peekReg(args.a);
                 switch (args.b) {
-                    0x00 => self.pipe.stdin = a,
-                    0x01 => self.pipe.stdout = a,
-                    0x02 => self.pipe.stderr = a,
+                    0x00 => self.execcontent.pipe.stdin = a,
+                    0x01 => self.execcontent.pipe.stdout = a,
+                    0x02 => self.execcontent.pipe.stderr = a,
                     else => return VmErr.InvalidStream,
                 }
+
+                ins = program[self.pc];
+                self.pc += 1;
+                continue :vm ins.op;
+            },
+            .mkpipe => {
+                const args = ins.args.abc;
+
+                var fds: [2]i32 = undefined;
+                const rc = std.os.linux.pipe2(&fds, .{ .CLOEXEC = true });
+                switch (std.posix.errno(rc)) {
+                    .SUCCESS => {},
+                    else => @panic("pipe failed"),
+                }
+                self.loadReg(rzval.initFd((@intCast(fds[0]))), args.a);
+                self.loadReg(rzval.initFd((@intCast(fds[1]))), args.b);
+
+                ins = program[self.pc];
+                self.pc += 1;
+                continue :vm ins.op;
+            },
+            .pipeclose => {
+                const args = ins.args.abc;
+                const a = self.peekReg(args.a);
+                std.debug.assert(a.type_info == .fd);
+                _ = std.os.linux.close(@intCast(a.data));
+
+                ins = program[self.pc];
+                self.pc += 1;
+                continue :vm ins.op;
+            },
+            .wait => {
+                const args = ins.args.abc;
+
+                var last_rc: u8 = 0;
+                for (self.execcontent.pending.items) |*child| {
+                    const term = child.wait(self.io) catch @panic("process panic'd");
+                    last_rc = switch (term) {
+                        .exited => |code| code,
+                        .signal => |sig| 128 + @as(u8, @intCast(@intFromEnum(sig))),
+                        else => 1 };
+                }
+                self.execcontent.pending.clearRetainingCapacity();
+                self.loadReg(rzval.initErrCode(last_rc), args.a);
 
                 ins = program[self.pc];
                 self.pc += 1;

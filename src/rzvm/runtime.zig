@@ -15,6 +15,9 @@ pub const Proto = struct {
     },
 };
 pub const Runtime = struct {
+    stdinfd: u8,
+    stdoutfd: u8,
+    stderrfd: u8,
     fi: u16,
     gi: u16,
     ci: u16,
@@ -25,7 +28,10 @@ pub const Runtime = struct {
     const allocator = std.heap.c_allocator;
 
     pub fn init() Runtime {
-        return .{
+        var self = Runtime{
+            .stdinfd = 0,
+            .stdoutfd = 0,
+            .stderrfd = 0,
             .fi = 0,
             .gi = 0,
             .ci = 0,
@@ -34,6 +40,13 @@ pub const Runtime = struct {
             .symbol = .init(allocator),
             .functions = undefined,
         };
+
+        // some init stuff
+        self.stdinfd = @intCast(self.addConstant(RzValue.initFd(0)));
+        self.stdoutfd = @intCast(self.addConstant(RzValue.initFd(1)));
+        self.stderrfd = @intCast(self.addConstant(RzValue.initFd(2)));
+
+        return self;
     }
 
     pub fn addGlobal(self: *Runtime, name: []const u8, value: RzValue) u16 {

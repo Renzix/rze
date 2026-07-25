@@ -101,6 +101,11 @@ pub const RzValue = packed struct(u64) {
         return init(TypeInfo.frame, false, false, false, GcBit.static, raw);
     }
 
+    pub fn initFd(fd: u16) RzValue {
+        // const raw = @as(u48, pc) << 16 | fp;
+        return init(TypeInfo.fd, false, false, false, GcBit.static, fd);
+    }
+
     pub inline fn asI48(self: RzValue) i48 {
         return switch (self.type_info) {
             TypeInfo.int => @bitCast(self.data),
