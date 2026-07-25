@@ -50,6 +50,9 @@ pub const Runtime = struct {
     }
 
     pub fn addGlobal(self: *Runtime, name: []const u8, value: RzValue) u16 {
+        if (self.symbol.get(name)) |gi| {
+            return gi;
+        }
         self.symbol.put(name, self.gi) catch @panic("oom, no space for symbol");
         self.variables[self.gi] = value;
         self.gi += 1;
@@ -71,6 +74,9 @@ pub const Runtime = struct {
     }
 
     pub fn reserveGlobal(self: *Runtime, name: []const u8) u16 {
+        if (self.symbol.get(name)) |gi| {
+            return gi;
+        }
         self.symbol.put(name, self.gi) catch @panic("oom, no space for symbol");
         self.gi += 1;
         return self.gi-1;

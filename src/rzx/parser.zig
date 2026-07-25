@@ -45,9 +45,11 @@ pub const Parser = struct {
         };
     }
 
+    pub fn reset(self: *Parser) void { self.i = 0; }
+
     pub fn run(self: *Parser, str: []const u8) !?ast.Program {
         self.code = str;
-        self.i = 0;
+        self.reset();
 
         const program = try self.parseCompleteCommandList();
         return program;

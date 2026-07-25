@@ -29,11 +29,15 @@ pub const Compiler = struct{
         };
     }
 
-    pub fn run(self: *Compiler, prog: ast.Program) std.ArrayList(inst) {
-        self.prog = prog;
+    pub fn reset(self: *Compiler) void {
         self.i = 0;
         self.bytecode.clearRetainingCapacity();
         self.reg = 0;
+    }
+
+    pub fn run(self: *Compiler, prog: ast.Program) std.ArrayList(inst) {
+        self.reset();
+        self.prog = prog;
         // Compile the AST to bytecode
         for (prog.andors.items, prog.background.items) |andor, _| {
             // log("line {}, contents: {any}, background: {}", .{index, andor,background});
