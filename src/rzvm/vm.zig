@@ -488,9 +488,9 @@ test "load and mov" {
     defer vm.deinit();
     errdefer vm.dump(0, 12);
     const r0 = 1001;
-    const vr0 = vm.runtime.setVariable("Test", rzval.initInt(r0));
+    const vr0 = vm.runtime.addConstant(rzval.initInt(r0));
     const bytecode = [_]inst{
-        inst.iABx(.loadg, 0x00, vr0),
+        inst.iABx(.loadc, 0x00, vr0),
         inst.iABC(.mov, 0x00, 0x01, 0),
         inst.exit(),
     };
@@ -504,18 +504,18 @@ test "addition" {
     defer vm.deinit();
     errdefer vm.dump(0, 12);
     const r0 = 1012;
-    const vr0 = vm.runtime.setVariable("Var0", rzval.initInt(r0));
+    const vr0 = vm.runtime.addConstant(rzval.initInt(r0));
     const r1 = -5;
-    const vr1 = vm.runtime.setVariable("Var1", rzval.initInt(r1));
+    const vr1 = vm.runtime.addConstant(rzval.initInt(r1));
     const r2 = -140737488355328;
-    const vr2 = vm.runtime.setVariable("Var2", rzval.initInt(r2));
+    const vr2 = vm.runtime.addConstant(rzval.initInt(r2));
     const r3: f32 = 3.141595653589;
-    const vr3 = vm.runtime.setVariable("Var3", rzval.initFloat(r3));
+    const vr3 = vm.runtime.addConstant(rzval.initFloat(r3));
     const bytecode = [_]inst{
-        inst.iABx(.loadg, 0x00, vr0),
-        inst.iABx(.loadg, 0x01, vr1),
-        inst.iABx(.loadg, 0x02, vr2),
-        inst.iABx(.loadg, 0x03, vr3),
+        inst.iABx(.loadc, 0x00, vr0),
+        inst.iABx(.loadc, 0x01, vr1),
+        inst.iABx(.loadc, 0x02, vr2),
+        inst.iABx(.loadc, 0x03, vr3),
         inst.iABC(.add, 0x00, 0x01, 0x04),
         inst.iABC(.add, 0x01, 0x02, 0x05),
         inst.iABC(.add, 0x03, 0x03, 0x06),
@@ -533,18 +533,18 @@ test "subtraction" {
     defer vm.deinit();
     errdefer vm.dump(0, 12);
     const r0 = 1000;
-    const vr0 = vm.runtime.setVariable("Var0", rzval.initInt(r0));
+    const vr0 = vm.runtime.addConstant(rzval.initInt(r0));
     const r1 = 7;
-    const vr1 = vm.runtime.setVariable("Var1", rzval.initInt(r1));
+    const vr1 = vm.runtime.addConstant(rzval.initInt(r1));
     const r2 = -140737488355328;
-    const vr2 = vm.runtime.setVariable("Var2", rzval.initInt(r2));
+    const vr2 = vm.runtime.addConstant(rzval.initInt(r2));
     const r3: f32 = 2.5;
-    const vr3 = vm.runtime.setVariable("Var3", rzval.initFloat(r3));
+    const vr3 = vm.runtime.addConstant(rzval.initFloat(r3));
     const bytecode = [_]inst{
-        inst.iABx(.loadg, 0x00, vr0),
-        inst.iABx(.loadg, 0x01, vr1),
-        inst.iABx(.loadg, 0x02, vr2),
-        inst.iABx(.loadg, 0x03, vr3),
+        inst.iABx(.loadc, 0x00, vr0),
+        inst.iABx(.loadc, 0x01, vr1),
+        inst.iABx(.loadc, 0x02, vr2),
+        inst.iABx(.loadc, 0x03, vr3),
         inst.iABC(.sub, 0x00, 0x01, 0x04),
         inst.iABC(.sub, 0x01, 0x00, 0x05),
         inst.iABC(.sub, 0x02, 0x01, 0x06),
@@ -566,18 +566,18 @@ test "multiplication" {
     defer vm.deinit();
     errdefer vm.dump(0, 12);
     const r0 = 1000;
-    const vr0 = vm.runtime.setVariable("Var0", rzval.initInt(r0));
+    const vr0 = vm.runtime.addConstant(rzval.initInt(r0));
     const r1 = 7;
-    const vr1 = vm.runtime.setVariable("Var1", rzval.initInt(r1));
+    const vr1 = vm.runtime.addConstant(rzval.initInt(r1));
     const r2 = 1 << 24;
-    const vr2 = vm.runtime.setVariable("Var2", rzval.initInt(r2));
+    const vr2 = vm.runtime.addConstant(rzval.initInt(r2));
     const r3: f32 = 2.5;
-    const vr3 = vm.runtime.setVariable("Var3", rzval.initFloat(r3));
+    const vr3 = vm.runtime.addConstant(rzval.initFloat(r3));
     const bytecode = [_]inst{
-        inst.iABx(.loadg, 0x00, vr0),
-        inst.iABx(.loadg, 0x01, vr1),
-        inst.iABx(.loadg, 0x02, vr2),
-        inst.iABx(.loadg, 0x03, vr3),
+        inst.iABx(.loadc, 0x00, vr0),
+        inst.iABx(.loadc, 0x01, vr1),
+        inst.iABx(.loadc, 0x02, vr2),
+        inst.iABx(.loadc, 0x03, vr3),
         inst.iABC(.mul, 0x00, 0x01, 0x04),
         inst.iABC(.mul, 0x02, 0x02, 0x05),
         inst.iABC(.mul, 0x00, 0x03, 0x06),
@@ -599,12 +599,12 @@ test "jmp, jz, jnz" {
     defer vm.deinit();
     errdefer vm.dump(0, 12);
     const r0 = 100;
-    const vr0 = vm.runtime.setVariable("Var0", rzval.initInt(r0));
+    const vr0 = vm.runtime.addConstant(rzval.initInt(r0));
     const r1 = 200;
-    const vr1 = vm.runtime.setVariable("Var1", rzval.initInt(r1));
+    const vr1 = vm.runtime.addConstant(rzval.initInt(r1));
     const bytecode = [_]inst{
-        inst.iABx(.loadg, 0x00, vr0),
-        inst.iABx(.loadg, 0x01, vr1),
+        inst.iABx(.loadc, 0x00, vr0),
+        inst.iABx(.loadc, 0x01, vr1),
         inst.iAsBx(.jmp, undefined, 0x01),
         inst.iABC(.invalid, 0x00, 0x01, 0x01), // this should be skipped
         inst.iABC(.add, 0x00, 0x01, 0x02),
@@ -632,12 +632,12 @@ test "eql, neq" {
     defer vm.deinit();
     errdefer vm.dump(0, 12);
     const r0 = 100;
-    const vr0 = vm.runtime.setVariable("Var0", rzval.initInt(r0));
+    const vr0 = vm.runtime.addConstant(rzval.initInt(r0));
     const r1 = 200;
-    const vr1 = vm.runtime.setVariable("Var1", rzval.initInt(r1));
+    const vr1 = vm.runtime.addConstant(rzval.initInt(r1));
     const bytecode = [_]inst{
-        inst.iABx(.loadg, 0x00, vr0),
-        inst.iABx(.loadg, 0x01, vr1),
+        inst.iABx(.loadc, 0x00, vr0),
+        inst.iABx(.loadc, 0x01, vr1),
         inst.iABC(.eql, 0x01, 0x01, undefined),
         inst.iABC(.invalid, 0x00, 0x00, 0x00),
         inst.iABC(.eql, 0x00, 0x01, undefined),
@@ -661,15 +661,15 @@ test "call, ret (bytecode)" {
     defer vm.deinit();
     errdefer vm.dump(0, 12);
     const r0 = vm.runtime.setFunction(5, 2, 3);
-    const vr0 = vm.runtime.setVariable("Func0", rzval.initFunction(r0));
+    const vr0 = vm.runtime.addConstant(rzval.initFunction(r0));
     const r1 = 100;
-    const vr1 = vm.runtime.setVariable("Var0", rzval.initInt(r1));
+    const vr1 = vm.runtime.addConstant(rzval.initInt(r1));
     const r2 = 200;
-    const vr2 = vm.runtime.setVariable("Var1", rzval.initInt(r2));
+    const vr2 = vm.runtime.addConstant(rzval.initInt(r2));
     const bytecode = [_]inst{
-        inst.iABx(.loadg, 0x00, vr0),
-        inst.iABx(.loadg, 0x01, vr1),
-        inst.iABx(.loadg, 0x02, vr2),
+        inst.iABx(.loadc, 0x00, vr0),
+        inst.iABx(.loadc, 0x01, vr1),
+        inst.iABx(.loadc, 0x02, vr2),
         inst.iABC(.call, 0x00, 0x01, 0x02),
         inst.exit(),
         inst.iABC(.add, 0x00, 0x01, 0x02),
@@ -688,16 +688,17 @@ test "call, ret (executable)" {
     errdefer vm.dump(0, 12);
     var s0 = str.CreateStaticStr("/bin/sh");
     const r0 = vm.runtime.setExecFunction(&s0.header, 2);
-    const vr0 = vm.runtime.setVariable("command", rzval.initFunction(r0));
+    const vr0 = vm.runtime.addConstant(rzval.initFunction(r0));
     const s1 = str.CreateStaticStr("-c");
-    const vr1 = vm.runtime.setVariable("arg1", rzval.initString(&s1.header));
+    const vr1 = vm.runtime.addConstant(rzval.initString(&s1.header));
     const s2 = str.CreateStaticStr("exit 7");
-    const vr2 = vm.runtime.setVariable("arg2", rzval.initString(&s2.header));
+    const vr2 = vm.runtime.addConstant(rzval.initString(&s2.header));
     const bytecode = [_]inst{
-        inst.iABx(.loadg, 0x00, vr0),
-        inst.iABx(.loadg, 0x01, vr1),
-        inst.iABx(.loadg, 0x02, vr2),
+        inst.iABx(.loadc, 0x00, vr0),
+        inst.iABx(.loadc, 0x01, vr1),
+        inst.iABx(.loadc, 0x02, vr2),
         inst.iABC(.call, 0x00, 0x01, 0x02),
+        inst.iABC(.wait, 0x00, undefined, undefined),
         inst.exit(),
     };
     try vm.run(&bytecode);
@@ -715,12 +716,12 @@ test "concat" {
     const allocator = std.heap.c_allocator;
     var r0 = str.CreateAllocatedStr("Hello my name is", allocator);
     defer str.DestroyAllocatedStr(r0, allocator);
-    const vr0 = vm.runtime.setVariable("stuff", rzval.initString(&r0.header));
+    const vr0 = vm.runtime.addConstant(rzval.initString(&r0.header));
     var r1 = str.CreateStaticStr(" renzix");
-    const vr1 = vm.runtime.setVariable("stuff2", rzval.initString(&r1.header));
+    const vr1 = vm.runtime.addConstant(rzval.initString(&r1.header));
     const bytecode = [_]inst{
-        inst.iABx(.loadg, 0x00, vr0),
-        inst.iABx(.loadg, 0x01, vr1),
+        inst.iABx(.loadc, 0x00, vr0),
+        inst.iABx(.loadc, 0x01, vr1),
         inst.iABC(.concat, 0x00, 0x02, 0x02),
         inst.exit(),
     };
