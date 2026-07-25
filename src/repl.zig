@@ -16,8 +16,10 @@ pub const repl = struct {
     stdin_buf: [4096]u8,
     writer: std.Io.File.Writer,
     reader: std.Io.File.Reader,
+    allocator: std.mem.Allocator,
 
     pub fn init(proc: std.process.Init) repl {
+        var debug_alloc: std.heap.DebugAllocator(.{}) =.init;
         const self = repl{
             .code = std.mem.zeroes([10240]u8),
             .code_len = 0,
@@ -26,6 +28,8 @@ pub const repl = struct {
             .stdin_buf = undefined,
             .writer = undefined,
             .reader = undefined,
+            .allocator = debug_alloc.allocator(),
+            // .allocator = std.heap.c_allocator,
         };
         return self;
     }
@@ -58,16 +62,19 @@ pub const repl = struct {
         if (self.code_len == 0) return;
         const prog = self.code[0..self.code_len];
 
-        var parser = p.Parser.init();
+        var parser = p.Parser.init(self.allocator);
         const ast = parser.run(prog) catch |err| {
-            std.debug.print("err: {any}", .{err}); return;
+            // @TODO(Renzix): Move all this terminal stuff to a seperate file
+            std.debug.print("\x1b[91m\x1b[1m--------- PARSER ERROR --------\n", .{});
+            std.debug.print("err: {any}\n", .{err});
+            std.debug.print("-------------------------------\n\x1b[0m", .{});
+            return;
         };
 
-        var compiler = c.Compiler.init().?;
+        var compiler = c.Compiler.init(self.allocator);
         const bytecode = compiler.run(ast.?);
 
-        var vm = v.rzvm.init(self.proc.io, compiler.runtime);
-        defer vm.deinit();
+        var vm = v.rzvm.init(self.allocator, self.proc.io, compiler.runtime);
         _ = vm.run(bytecode.items) catch {
             vm.dump(0, 12);
             @panic("AAAAAHHHH");

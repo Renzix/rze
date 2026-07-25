@@ -49,10 +49,10 @@ pub const rzvm = struct {
     fp: u16,
     io: std.Io,
     top: u16,
-    const allocator = std.heap.c_allocator;
+    allocator: std.mem.Allocator,
 
-    pub fn init(io: std.Io, rt: Runtime) rzvm {
-        const regs = allocator.alloc(u64, 256) catch @panic("oom");
+    pub fn init(alloc: std.mem.Allocator, io: std.Io, rt: Runtime) rzvm {
+        const regs = alloc.alloc(u64, 256) catch @panic("oom");
         @memset(regs, 0);
         return rzvm{
             .registers = regs,
@@ -62,10 +62,11 @@ pub const rzvm = struct {
             .fp = 0,
             .io = io,
             .top = 0,
+            .allocator = alloc,
         };
     }
     pub fn deinit(self: *rzvm) void {
-        allocator.free(self.registers);
+        self.allocator.free(self.registers);
     }
 
     pub fn reset(self: *rzvm) void {
@@ -277,7 +278,7 @@ pub const rzvm = struct {
                             .stderr = rzhelper.toStdIo(self.execcontent.pipe.stderr),
                         }) catch |err| std.debug.panic("spawn failed: {s}", .{@errorName(err)});
 
-                        self.execcontent.pending.append(allocator, child) catch @panic("oom");
+                        self.execcontent.pending.append(self.allocator, child) catch @panic("oom");
                         const i: i48 = @intCast(self.execcontent.pending.items.len-1);
                         self.loadReg(rzval.initInt(i), args.a);
                     },
@@ -412,7 +413,7 @@ pub const rzvm = struct {
                         // break; // return rzval.initErr(???);
                     }
                 }
-                const raw: []u8 = allocator.alloc(u8, totalmem) catch @panic("oom");
+                const raw: []u8 = self.allocator.alloc(u8, totalmem) catch @panic("oom");
                 var strindex: usize = 0;
                 for (args.a..(args.a+args.b)) |regindex| {
                     const reg = self.peekReg(@as(u8, @intCast(regindex)));
@@ -421,7 +422,7 @@ pub const rzvm = struct {
                     strindex += s.len;
                 }
 
-                const r0 = str.CreateAllocatedStr(raw, allocator);
+                const r0 = str.CreateAllocatedStr(raw, self.allocator);
                 self.loadReg(rzval.initString(&r0.header), args.c);
                 // log("STR: {any}\n",.{self.peekReg(args.c).asString()});
 
@@ -450,7 +451,7 @@ pub const rzvm = struct {
         const MAX: u16 = 65500;
         if (newsize >= MAX) return VmErr.StackOverflow;
         const oldsize = self.registers.len;
-        self.registers = allocator.realloc(self.registers,
+        self.registers = self.allocator.realloc(self.registers,
                                            @min(@as(usize, newsize*2), MAX)) catch @panic("oom");
         @memset(self.registers[oldsize..], 0); // might delete, for safety and if i ever use gc???
     }

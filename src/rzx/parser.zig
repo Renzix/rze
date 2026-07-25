@@ -13,8 +13,7 @@ const helper = @import("token.zig");
 // @TODO(Renzix): Redirection consumed but discarded, need to add more redirection
 // @TODO(Renzix): !foo is a command but being parsed as a pipeline
 // @TODO(Renzix): Comments
-// @TODO(Renzix): Actual memory management
-// @TODO(Renzix): Readable Errors?
+// @TODO(Renzix): Store current program state in error
 // @TODO(Renzix): && value is parsed as valid syntax (should error)
 // @TODO(Renzix): Testing for "${var}", "pre${var}post", echo "x$HOME.y"z, a\ b,
 //                ls -l, echo $, echo "", !foo
@@ -27,6 +26,7 @@ const ParseErr = error{
     ExpectedFileName,
     UnterminatedSingleQuote,
     UnterminatedDoubleQuote,
+    OutOfMemory,
 };
 
 // we parse and lex at the same time for shell!!!
@@ -35,15 +35,21 @@ const ParseErr = error{
 pub const Parser = struct {
     code: []const u8,
     i: usize,
+    allocator: std.mem.Allocator,
 
-    const allocator = std.heap.c_allocator;
-
-    pub fn init() Parser {
+    pub fn init(alloc: std.mem.Allocator) Parser {
+        // var arena: std.heap.ArenaAllocator = .init(std.heap.page_allocator);
         return Parser{
             .code = undefined,
             .i = 0,
+            .allocator = alloc,
         };
     }
+
+    // pub fn deinit(self: *Parser) void {
+    //     // self.allocator.deinit(); ???
+    // }
+
     pub fn run(self: *Parser, str: []const u8) !?ast.Program {
         self.code = str;
 
@@ -56,15 +62,15 @@ pub const Parser = struct {
         var program: ast.Program = .{ .andors = .empty, .background = .empty };
         while (true) {
             if(try self.parseAndOr()) |andor| {
-                program.andors.append(allocator, andor) catch @panic("oom");
+                try program.andors.append(self.allocator, andor);
             } else {
                 break;
             }
             if (self.lexChar('&')) {
-                program.background.append(allocator, true) catch @panic("oom");
+                try program.background.append(self.allocator, true);
                 continue;
             } else {
-                program.background.append(allocator, false) catch @panic("oom");
+                try program.background.append(self.allocator, false);
             }
             if (self.lexChar(';')) {
                 continue;
@@ -79,19 +85,17 @@ pub const Parser = struct {
         var andor: ast.AndOr = .{ .pipelines = .empty, .and_or_list = .empty };
         while (true) {
             if (try self.parsePipeline()) |p| {
-                andor.pipelines.append(allocator, p) catch @panic("oom");
+                try andor.pipelines.append(self.allocator, p);
             }
             _ = self.skipWhitespace();
             if (self.lexString("&&")) {
-                andor.and_or_list.append(allocator, ast.AndOrIf.and_if)
-                    catch @panic("oom");
+                try andor.and_or_list.append(self.allocator, ast.AndOrIf.and_if);
                 _ = self.skipWhitespace();
                 _ = self.skipNewlines();
                 continue;
             }
             if (self.lexString("||")) {
-                andor.and_or_list.append(allocator, ast.AndOrIf.or_if)
-                    catch @panic("oom");
+                try andor.and_or_list.append(self.allocator, ast.AndOrIf.or_if);
                 _ = self.skipWhitespace();
                 _ = self.skipNewlines();
                 continue;
@@ -108,7 +112,7 @@ pub const Parser = struct {
         if(self.lexChar('!')) pipeline.bang = true;
         while(true) {
             if (try self.parseCommand()) |cmd| {
-                pipeline.cmds.append(allocator, cmd) catch @panic("oom");
+                try pipeline.cmds.append(self.allocator, cmd);
             }
             _ = self.skipWhitespace();
             if (self.lexChar('|')) {
@@ -138,7 +142,7 @@ pub const Parser = struct {
             .assignments = .empty,
             .cmd = null,
             .args = .empty,
-            .redirects = undefined,
+            .redirects = .empty,
         };
         var found = false;
         const prefix = try self.parseCmdPrefix(&sc);
@@ -161,7 +165,7 @@ pub const Parser = struct {
             if (ass) |assign| {
                 log("Variable Name: {s}",.{assign.name});
                 log("Variable Value: {any}",.{assign.value});
-                sc.assignments.append(allocator, assign) catch @panic("oom");
+                try sc.assignments.append(self.allocator, assign);
                 found=true; continue;
             }
             const ioredir = try self.parseIoRedirect();
@@ -184,7 +188,7 @@ pub const Parser = struct {
             _ = self.skipWhitespace();
             const w = try self.lexWord();
             if (w) |arg| {
-                sc.args.append(allocator, arg) catch @panic("oom");
+                try sc.args.append(self.allocator, arg);
                 found=true;
                 continue;
             }
@@ -294,7 +298,7 @@ pub const Parser = struct {
             const ok = switch (self.code[self.i]) {
                 '\'' => try self.lexSingleQuote(&w),
                 '"' => try self.lexDoubleQuote(&w),
-                '$' => self.lexDollar(&w, Quoted.NONE),
+                '$' => try self.lexDollar(&w, Quoted.NONE),
                 else => if(helper.WordChars[self.code[self.i]])
                             try self.lexLiterals(&w)
                         else break,
@@ -325,7 +329,7 @@ pub const Parser = struct {
         };
         std.debug.assert(self.code[self.i]=='\'');
         self.i += 1;
-        w.append(allocator, lit) catch @panic("oom");
+        try w.append(self.allocator, lit);
         log("Found Single Quote: {s}", .{lit.literal.text});
         return true;
     }
@@ -345,11 +349,12 @@ pub const Parser = struct {
                                 .quoted = Quoted.DOUBLE,
                             }
                         };
-                        w.append(allocator, lit) catch @panic("oom");
+                        try w.append(self.allocator, lit);
                         log("Found Double Quote: \"{s}\"", .{lit.literal.text});
                     }
                     // @TODO(Renzix): if "$ " then ignore
-                    if (!self.lexDollar(w, Quoted.DOUBLE)) return false;
+                    const d = try self.lexDollar(w, Quoted.DOUBLE);
+                    if (!d) return false;
                     start = self.i;
                     continue;
                 },
@@ -366,7 +371,7 @@ pub const Parser = struct {
                                         .quoted = Quoted.DOUBLE,
                                     }
                                 };
-                                w.append(allocator, lit) catch @panic("oom");
+                                try w.append(self.allocator, lit);
                                 log("Found Double Quote: \"{s}\"",
                                     .{lit.literal.text});
                             }
@@ -394,7 +399,7 @@ pub const Parser = struct {
                 },
             };
             std.debug.assert(self.code[self.i]=='"');
-            w.append(allocator, lit) catch @panic("oom");
+            try w.append(self.allocator, lit);
             log("Found Double Quote: \"{s}\"", .{lit.literal.text});
         }
         if (self.i >= self.code.len) return false;
@@ -402,7 +407,7 @@ pub const Parser = struct {
         return true;
     }
 
-    fn lexDollar(self: *Parser, w: *std.ArrayList(ast.Word), q: Quoted) bool {
+    fn lexDollar(self: *Parser, w: *std.ArrayList(ast.Word), q: Quoted) !bool {
         if (!self.nextChar()) return false;
         // this ch thing is for the edge case of "echo $"
         // so i dont go out of bounds
@@ -432,7 +437,7 @@ pub const Parser = struct {
                             .quoted = q,
                         },
                     };
-                    w.append(allocator, lit) catch @panic("oom");
+                    try w.append(self.allocator, lit);
                     log("Lone $: |{s}|", .{lit.literal.text});
                     break :blk true;
                 },
@@ -440,7 +445,7 @@ pub const Parser = struct {
         };
     }
 
-    fn lexSpecial(self: *Parser, w: *std.ArrayList(ast.Word), q: Quoted) bool {
+    fn lexSpecial(self: *Parser, w: *std.ArrayList(ast.Word), q: Quoted) !bool {
         if(!self.nextChar()) @panic("Tried to parse special $ but got EOF");
         // ensure that self.i is actually a special character???
         const exp: ast.Word = .{
@@ -450,13 +455,13 @@ pub const Parser = struct {
                 .typ = ast.ExpandTypes.variable,
             },
         };
-        w.append(allocator, exp) catch @panic("oom");
+        try w.append(self.allocator, exp);
         log("Special Variable: ${s}", .{exp.expand.name});
         return true;
     }
 
     fn lexExpansion(self: *Parser, w: *std.ArrayList(ast.Word),
-                    q: Quoted, typ: ast.ExpandTypes) bool {
+                    q: Quoted, typ: ast.ExpandTypes) !bool {
         // this should always result in a expand str
         const delim = @intFromBool(typ != ast.ExpandTypes.variable);
         const start = self.i;
@@ -479,7 +484,7 @@ pub const Parser = struct {
             },
         };
         self.i += delim;
-        w.append(allocator, exp) catch @panic("oom");
+        try w.append(self.allocator, exp);
         if (exp.expand.quoted == Quoted.DOUBLE)
             log("Found Expandable Word: \"{s}\"", .{exp.expand.name})
         else
@@ -501,7 +506,7 @@ pub const Parser = struct {
                                     .quoted = Quoted.NONE,
                                 }
                             };
-                            w.append(allocator, lit) catch @panic("oom");
+                            try w.append(self.allocator, lit);
                             log("Found Unquoted: |{s}|", .{lit.literal.text});
                         }
                         // @TODO(Renzix): Handle "echo $ ",
@@ -509,7 +514,7 @@ pub const Parser = struct {
                         const ok = switch (ch) {
                             '"' => try self.lexDoubleQuote(w),
                             '\'' => try self.lexSingleQuote(w),
-                            '$' => self.lexDollar(w, Quoted.NONE),
+                            '$' => try self.lexDollar(w, Quoted.NONE),
                             '\\' => ret: {
                                 // @TODO(Renzix): This could probably not be its
                                 // own function
@@ -548,7 +553,7 @@ pub const Parser = struct {
                     .quoted = Quoted.NONE,
                 },
             };
-            w.append(allocator, lit) catch @panic("oom");
+            try w.append(self.allocator, lit);
             log("Found unquoted Word: |{s}|", .{lit.literal.text});
         }
         return true;
@@ -576,7 +581,7 @@ pub const Parser = struct {
             const ok = switch (self.code[self.i]) {
                 '\'' => try self.lexSingleQuote(&w),
                 '"' => try self.lexDoubleQuote(&w),
-                '$' => self.lexDollar(&w, Quoted.NONE),
+                '$' => try self.lexDollar(&w, Quoted.NONE),
                 else => if(helper.WordChars[self.code[self.i]])
                             try self.lexLiterals(&w)
                         else break,

@@ -17,8 +17,9 @@ pub const Compiler = struct{
     runtime: Runtime,
     reg: u8,
     variableindex: u16,
-    const allocator = std.heap.c_allocator;
-    pub fn init() ?Compiler {
+    allocator: std.mem.Allocator,
+
+    pub fn init(alloc: std.mem.Allocator) Compiler {
         const rt = Runtime.init();
         return .{
             .prog = undefined,
@@ -27,6 +28,7 @@ pub const Compiler = struct{
             .runtime = rt,
             .reg = 0,
             .variableindex = 0,
+            .allocator = alloc,
         };
     }
 
@@ -56,6 +58,7 @@ pub const Compiler = struct{
         var prevpipein: u8 = undefined;
         var prevpipeout: u8 = undefined;
         const initReg = self.reg;
+        // toggle between the first and last 2 registers
         const pipeRegs = [4]u8{ self.newReg(), self.newReg(), self.newReg(), self.newReg() };
         for (pipeline.cmds.items, 0..) |pl, pindex| {
             const fds: [2]u8 = blk: {
@@ -131,7 +134,7 @@ pub const Compiler = struct{
                     _ = self.compileWord(val);
                 } else {
                     // var=
-                    var sX = str.CreateAllocatedStr("", allocator);
+                    var sX = str.CreateAllocatedStr("", self.allocator);
                     var rzv = rzval.initString(&sX.header);
                     rzv.nullable = true;
                     const rX = self.runtime.addConstant(rzv);
@@ -157,7 +160,7 @@ pub const Compiler = struct{
             switch (word) {
                 .literal => {
                     //@TODO(Renzix): if 2 of these happen in a row you can combine them
-                    var sX = str.CreateAllocatedStr(word.literal.text, allocator);
+                    var sX = str.CreateAllocatedStr(word.literal.text, self.allocator);
                     const rX = self.runtime.addConstant(rzval.initString(&sX.header));
                     const reg = self.newReg();
                     self.emit(inst.iABx(.loadc, reg, rX));
@@ -167,7 +170,7 @@ pub const Compiler = struct{
                     if(self.runtime.findGlobal(word.expand.name)) |slot| {
                         self.emit(inst.iABx(.loadg, reg, slot));
                     } else {
-                        var sX = str.CreateAllocatedStr("", allocator);
+                        var sX = str.CreateAllocatedStr("", self.allocator);
                         var rzv = rzval.initString(&sX.header);
                         rzv.nullable = true;
                         const rX = self.runtime.addConstant(rzv);
@@ -183,7 +186,7 @@ pub const Compiler = struct{
     }
 
     pub fn emit(self: *Compiler, ins: inst) void {
-        self.bytecode.append(allocator, ins) catch @panic("oom");
+        self.bytecode.append(self.allocator, ins) catch @panic("oom");
     }
 
     pub fn newReg(self: *Compiler) u8 {
