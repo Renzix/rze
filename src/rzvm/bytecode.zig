@@ -94,6 +94,7 @@ pub fn dump(bytecode: std.ArrayList(instruction)) void {
     for (bytecode.items) |ins| {
         switch (ins.op) {
             .loadg, .loadc, .storeg => log(".{s:<10} r{} var[{}]", .{@tagName(ins.op), ins.args.abx.a, ins.args.abx.bx}),
+            .setio => log(".{s:<10} r{} {}", .{@tagName(ins.op), ins.args.abc.a, ins.args.abc.b}),
             .concat => {
                 log(".{s:<10} {}-{} res{}", .{@tagName(ins.op), ins.args.abc.a, ins.args.abc.a+ins.args.abc.b, ins.args.abc.c});
             },
@@ -104,7 +105,7 @@ pub fn dump(bytecode: std.ArrayList(instruction)) void {
             .call => {
                 log(".{s:<10} r{} ret{} arg{}", .{@tagName(ins.op), ins.args.abc.a, ins.args.abc.b, ins.args.abc.c});
             },
-            .exit => log(".{s:<10}", .{@tagName(ins.op)}),
+            .exit, .wait => log(".{s:<10}", .{@tagName(ins.op)}),
             else => log(".{s:<10} 0b{b:0>8} 0b{b:0>8} 0b{b:0>8}",
                         .{@tagName(ins.op), ins.args.abc.a, ins.args.abc.b, ins.args.abc.c}),
 
