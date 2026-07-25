@@ -25,6 +25,8 @@ const helper = @import("token.zig");
 const ParseErr = error{
     Unimplemented,
     ExpectedFileName,
+    UnterminatedSingleQuote,
+    UnterminatedDoubleQuote,
 };
 
 // we parse and lex at the same time for shell!!!
@@ -42,18 +44,18 @@ pub const Parser = struct {
             .i = 0,
         };
     }
-    pub fn run(self: *Parser, str: []const u8) ?ast.Program {
+    pub fn run(self: *Parser, str: []const u8) !?ast.Program {
         self.code = str;
 
-        const program = self.parseCompleteCommandList();
+        const program = try self.parseCompleteCommandList();
         return program;
     }
 
     // complete command and list
-    fn parseCompleteCommandList(self: *Parser) ?ast.Program {
+    fn parseCompleteCommandList(self: *Parser) !?ast.Program {
         var program: ast.Program = .{ .andors = .empty, .background = .empty };
         while (true) {
-            if(self.parseAndOr()) |andor| {
+            if(try self.parseAndOr()) |andor| {
                 program.andors.append(allocator, andor) catch @panic("oom");
             } else {
                 break;
@@ -73,10 +75,10 @@ pub const Parser = struct {
         if (program.andors.items.len > 0) return program else return null;
     }
 
-    fn parseAndOr(self: *Parser) ?ast.AndOr {
+    fn parseAndOr(self: *Parser) !?ast.AndOr {
         var andor: ast.AndOr = .{ .pipelines = .empty, .and_or_list = .empty };
         while (true) {
-            if (self.parsePipeline()) |p| {
+            if (try self.parsePipeline()) |p| {
                 andor.pipelines.append(allocator, p) catch @panic("oom");
             }
             _ = self.skipWhitespace();
@@ -100,12 +102,12 @@ pub const Parser = struct {
     }
 
     // Pipeline and pipeline sequence
-    fn parsePipeline(self: *Parser) ?ast.Pipeline {
+    fn parsePipeline(self: *Parser) !?ast.Pipeline {
         var pipeline: ast.Pipeline = .{ .bang = false, .cmds = .empty };
         _ = self.skipWhitespace();
         if(self.lexChar('!')) pipeline.bang = true;
         while(true) {
-            if (self.parseCommand()) |cmd| {
+            if (try self.parseCommand()) |cmd| {
                 pipeline.cmds.append(allocator, cmd) catch @panic("oom");
             }
             _ = self.skipWhitespace();
@@ -123,15 +125,15 @@ pub const Parser = struct {
             return null;
     }
 
-    fn parseCommand(self: *Parser) ?ast.Command {
+    fn parseCommand(self: *Parser) !?ast.Command {
         // function command
         // compound command and optional redirect
-        if (self.parseSimpleCommand()) |sc| {
+        if (try self.parseSimpleCommand()) |sc| {
             return .{ .simple_command = sc };
         }
         return null;
     }
-    fn parseSimpleCommand(self: *Parser) ?ast.SimpleCommand {
+    fn parseSimpleCommand(self: *Parser) !?ast.SimpleCommand {
         var sc: ast.SimpleCommand = .{
             .assignments = .empty,
             .cmd = null,
@@ -139,14 +141,15 @@ pub const Parser = struct {
             .redirects = undefined,
         };
         var found = false;
-        const prefix = self.parseCmdPrefix(&sc) catch return null;
+        const prefix = try self.parseCmdPrefix(&sc);
         if(prefix) {
             found = true;
         }
-        if(self.parseCmdName(&sc)) {
+        const cmd = try self.parseCmdName(&sc);
+        if(cmd) {
             found = true;
         }
-        _ = self.parseCmdSuffix(&sc) catch return null;
+        _ = try self.parseCmdSuffix(&sc);
         if (found) return sc else return null;
     }
 
@@ -154,7 +157,8 @@ pub const Parser = struct {
         var found = false;
         while(true) {
             _ = self.skipWhitespace();
-            if (self.lexAssignment()) |assign| {
+            const ass = try self.lexAssignment();
+            if (ass) |assign| {
                 log("Variable Name: {s}",.{assign.name});
                 log("Variable Value: {any}",.{assign.value});
                 sc.assignments.append(allocator, assign) catch @panic("oom");
@@ -168,8 +172,8 @@ pub const Parser = struct {
         return found;
     }
 
-    fn parseCmdName(self: *Parser, sc: *ast.SimpleCommand) bool {
-        const cmd_name = self.lexWord();
+    fn parseCmdName(self: *Parser, sc: *ast.SimpleCommand) !bool {
+        const cmd_name = try self.lexWord();
         sc.cmd = cmd_name;
         return cmd_name!=null;
     }
@@ -178,7 +182,8 @@ pub const Parser = struct {
         var found = false;
         while(true) {
             _ = self.skipWhitespace();
-            if (self.lexWord()) |arg| {
+            const w = try self.lexWord();
+            if (w) |arg| {
                 sc.args.append(allocator, arg) catch @panic("oom");
                 found=true;
                 continue;
@@ -225,7 +230,7 @@ pub const Parser = struct {
                             self.i += 1;
                             _ = self.skipWhitespace();
 
-                            const file = self.lexWord();
+                            const file = try self.lexWord();
                             if(file==null) {
                                 log("io_redirect > failed with no/invalid filename", .{});
                                 return ParseErr.ExpectedFileName;
@@ -258,7 +263,7 @@ pub const Parser = struct {
                             self.i += 1;
                             _ = self.skipWhitespace();
                             // expected filename, io_rediect with no filename
-                            const file = self.lexWord();
+                            const file = try self.lexWord();
                             if(file==null) {
                                 log("io_redirect < failed with no/invalid filename", .{});
                                 return ParseErr.ExpectedFileName;
@@ -282,16 +287,16 @@ pub const Parser = struct {
         return null;
     }
 
-    fn lexWord(self: *Parser) ?std.ArrayList(ast.Word) {
+    fn lexWord(self: *Parser) !?std.ArrayList(ast.Word) {
         var w: std.ArrayList(ast.Word) = .empty;
         const start = self.i;
         while (self.i < self.code.len) {
             const ok = switch (self.code[self.i]) {
-                '\'' => self.lexSingleQuote(&w),
-                '"' => self.lexDoubleQuote(&w),
+                '\'' => try self.lexSingleQuote(&w),
+                '"' => try self.lexDoubleQuote(&w),
                 '$' => self.lexDollar(&w, Quoted.NONE),
                 else => if(helper.WordChars[self.code[self.i]])
-                            self.lexLiterals(&w)
+                            try self.lexLiterals(&w)
                         else break,
             };
             if (!ok) { self.i = start; return null; }
@@ -300,7 +305,7 @@ pub const Parser = struct {
         return w;
     }
 
-    fn lexSingleQuote(self: *Parser, w: *std.ArrayList(ast.Word)) bool {
+    fn lexSingleQuote(self: *Parser, w: *std.ArrayList(ast.Word)) !bool {
         // parse single quotes AS IS,
         // everything should be literal and ignore quotes
         const start = self.i;
@@ -311,7 +316,7 @@ pub const Parser = struct {
                 else => {},
             }
             self.i += 1;
-        }
+        } else return ParseErr.UnterminatedSingleQuote;
         const lit: ast.Word = .{
             .literal = .{
                 .text = self.code[start+1..self.i],
@@ -325,7 +330,7 @@ pub const Parser = struct {
         return true;
     }
 
-    fn lexDoubleQuote(self: *Parser, w: *std.ArrayList(ast.Word)) bool {
+    fn lexDoubleQuote(self: *Parser, w: *std.ArrayList(ast.Word)) !bool {
         // parse double quotes, should also handle var expansion
         var start = self.i+1;
         if (self.code[self.i]=='"') { self.i += 1; } else { return false; }
@@ -378,7 +383,7 @@ pub const Parser = struct {
                 else => {},
             }
             self.i += 1;
-        }
+        } else return ParseErr.UnterminatedDoubleQuote;
         // in the case of expand this can end up producing "" followed by $var
         // followed by "", lets ignore the ""
         if (self.i > start) {
@@ -482,7 +487,7 @@ pub const Parser = struct {
         return true;
     }
 
-    fn lexLiterals(self: *Parser, w: *std.ArrayList(ast.Word)) bool {
+    fn lexLiterals(self: *Parser, w: *std.ArrayList(ast.Word)) !bool {
         // can be a expand string or may not be
         var start = self.i;
         while(self.i < self.code.len) {
@@ -502,8 +507,8 @@ pub const Parser = struct {
                         // @TODO(Renzix): Handle "echo $ ",
                         // in this case $ should be literal
                         const ok = switch (ch) {
-                            '"' => self.lexDoubleQuote(w),
-                            '\'' => self.lexSingleQuote(w),
+                            '"' => try self.lexDoubleQuote(w),
+                            '\'' => try self.lexSingleQuote(w),
                             '$' => self.lexDollar(w, Quoted.NONE),
                             '\\' => ret: {
                                 // @TODO(Renzix): This could probably not be its
@@ -549,7 +554,7 @@ pub const Parser = struct {
         return true;
     }
 
-    fn lexAssignment(self: *Parser) ?ast.AssignmentWord {
+    fn lexAssignment(self: *Parser) !?ast.AssignmentWord {
         // parse the until =, if you dont hit = return FALSE because this isnt a
         // assignment!!1! WOW
         const start = self.i;
@@ -569,11 +574,11 @@ pub const Parser = struct {
         var w: std.ArrayList(ast.Word) = .empty;
         while (self.i < self.code.len) {
             const ok = switch (self.code[self.i]) {
-                '\'' => self.lexSingleQuote(&w),
-                '"' => self.lexDoubleQuote(&w),
+                '\'' => try self.lexSingleQuote(&w),
+                '"' => try self.lexDoubleQuote(&w),
                 '$' => self.lexDollar(&w, Quoted.NONE),
                 else => if(helper.WordChars[self.code[self.i]])
-                            self.lexLiterals(&w)
+                            try self.lexLiterals(&w)
                         else break,
             };
             if (!ok) { self.i = start; return null; }

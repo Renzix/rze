@@ -59,10 +59,12 @@ pub const repl = struct {
         const prog = self.code[0..self.code_len];
 
         var parser = p.Parser.init();
-        const ast = parser.run(prog).?;
+        const ast = parser.run(prog) catch |err| {
+            std.debug.print("err: {any}", .{err}); return;
+        };
 
         var compiler = c.Compiler.init().?;
-        const bytecode = compiler.run(ast);
+        const bytecode = compiler.run(ast.?);
 
         var vm = v.rzvm.init(self.proc.io, compiler.runtime);
         defer vm.deinit();
