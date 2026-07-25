@@ -38,7 +38,6 @@ pub const Parser = struct {
     allocator: std.mem.Allocator,
 
     pub fn init(alloc: std.mem.Allocator) Parser {
-        // var arena: std.heap.ArenaAllocator = .init(std.heap.page_allocator);
         return Parser{
             .code = undefined,
             .i = 0,
