@@ -45,12 +45,9 @@ pub const Parser = struct {
         };
     }
 
-    // pub fn deinit(self: *Parser) void {
-    //     // self.allocator.deinit(); ???
-    // }
-
     pub fn run(self: *Parser, str: []const u8) !?ast.Program {
         self.code = str;
+        self.i = 0;
 
         const program = try self.parseCompleteCommandList();
         return program;

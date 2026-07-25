@@ -14,20 +14,17 @@ pub const Compiler = struct{
     prog: ast.Program,
     i: usize,
     bytecode: std.ArrayList(inst),
-    runtime: Runtime,
+    runtime: *Runtime,
     reg: u8,
-    variableindex: u16,
     allocator: std.mem.Allocator,
 
-    pub fn init(alloc: std.mem.Allocator) Compiler {
-        const rt = Runtime.init();
+    pub fn init(alloc: std.mem.Allocator, rt: *Runtime) Compiler {
         return .{
             .prog = undefined,
             .i = 0,
             .bytecode = .empty,
             .runtime = rt,
             .reg = 0,
-            .variableindex = 0,
             .allocator = alloc,
         };
     }
@@ -35,6 +32,8 @@ pub const Compiler = struct{
     pub fn run(self: *Compiler, prog: ast.Program) std.ArrayList(inst) {
         self.prog = prog;
         self.i = 0;
+        self.bytecode.clearRetainingCapacity();
+        self.reg = 0;
         // Compile the AST to bytecode
         for (prog.andors.items, prog.background.items) |andor, _| {
             // log("line {}, contents: {any}, background: {}", .{index, andor,background});
@@ -192,10 +191,5 @@ pub const Compiler = struct{
     pub fn newReg(self: *Compiler) u8 {
         self.reg += 1;
         return self.reg-1;
-    }
-
-    pub fn newVariable(self: *Compiler) u16 {
-        self.variableindex += 1;
-        return self.variableindex-1;
     }
 };

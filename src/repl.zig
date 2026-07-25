@@ -6,6 +6,7 @@ const std = @import("std");
 const p = @import("rzx/parser.zig");
 const c = @import("rzx/compiler.zig");
 const v = @import("rzvm/vm.zig");
+const Runtime  = @import("rzvm/runtime.zig").Runtime;
 
 // In src/repl.zig
 pub const repl = struct {
@@ -17,10 +18,15 @@ pub const repl = struct {
     writer: std.Io.File.Writer,
     reader: std.Io.File.Reader,
     allocator: std.mem.Allocator,
+    runtime: Runtime,
+    parser: p.Parser,
+    compiler: c.Compiler,
+    vm: v.rzvm,
 
     pub fn init(proc: std.process.Init) repl {
         var debug_alloc: std.heap.DebugAllocator(.{}) =.init;
-        const self = repl{
+
+        var self = repl{
             .code = std.mem.zeroes([10240]u8),
             .code_len = 0,
             .proc = proc,
@@ -30,7 +36,14 @@ pub const repl = struct {
             .reader = undefined,
             .allocator = debug_alloc.allocator(),
             // .allocator = std.heap.c_allocator,
+            .runtime = Runtime.init(),
+            .parser = undefined,
+            .compiler = undefined,
+            .vm = undefined,
         };
+        self.parser = p.Parser.init(self.allocator);
+        self.compiler = c.Compiler.init(self.allocator, &self.runtime);
+        self.vm = v.rzvm.init(self.allocator, self.proc.io, &self.runtime);
         return self;
     }
     pub fn run(self: *repl) void {
@@ -62,8 +75,7 @@ pub const repl = struct {
         if (self.code_len == 0) return;
         const prog = self.code[0..self.code_len];
 
-        var parser = p.Parser.init(self.allocator);
-        const ast = parser.run(prog) catch |err| {
+        const ast = self.parser.run(prog) catch |err| {
             // @TODO(Renzix): Move all this terminal stuff to a seperate file
             std.debug.print("\x1b[91m\x1b[1m--------- PARSER ERROR --------\n", .{});
             std.debug.print("err: {any}\n", .{err});
@@ -71,12 +83,10 @@ pub const repl = struct {
             return;
         };
 
-        var compiler = c.Compiler.init(self.allocator);
-        const bytecode = compiler.run(ast.?);
+        const bytecode = self.compiler.run(ast.?);
 
-        var vm = v.rzvm.init(self.allocator, self.proc.io, compiler.runtime);
-        _ = vm.run(bytecode.items) catch {
-            vm.dump(0, 12);
+        _ = self.vm.run(bytecode.items) catch {
+            self.vm.dump(0, 12);
             @panic("AAAAAHHHH");
         };
     }

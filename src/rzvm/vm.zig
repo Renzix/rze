@@ -43,7 +43,7 @@ const Pipe = struct {
 
 pub const rzvm = struct {
     registers: []u64,
-    runtime: Runtime,
+    runtime: *Runtime,
     execcontent: ExecContent,
     pc: u16,
     fp: u16,
@@ -51,7 +51,7 @@ pub const rzvm = struct {
     top: u16,
     allocator: std.mem.Allocator,
 
-    pub fn init(alloc: std.mem.Allocator, io: std.Io, rt: Runtime) rzvm {
+    pub fn init(alloc: std.mem.Allocator, io: std.Io, rt: *Runtime) rzvm {
         const regs = alloc.alloc(u64, 256) catch @panic("oom");
         @memset(regs, 0);
         return rzvm{
@@ -70,11 +70,14 @@ pub const rzvm = struct {
     }
 
     pub fn reset(self: *rzvm) void {
+        @memset(self.registers, 0);
         self.pc = 0;
         self.fp = 0;
         self.top = 0;
+        self.execcontent = .{ .pending = .empty, .pipe = .{} };
     }
     pub fn run(self: *rzvm, program: []const inst) VmErr!void {
+        self.reset();
         var ins = program[0];
         self.pc = 1;
         vm: switch (ins.op) {
