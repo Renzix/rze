@@ -638,8 +638,10 @@ pub const Parser = struct {
 };
 
 test "parse simple command with a single word" {
-    var parser = Parser.init();
-    const program = parser.run("ls") orelse return error.TestExpectedProgram;
+    var debugallocator: std.heap.DebugAllocator(.{}) =.init;
+    const allocator = debugallocator.allocator();
+    var parser = Parser.init(allocator);
+    const program = try parser.run("ls") orelse return error.TestExpectedProgram;
 
     try std.testing.expectEqual(@as(usize, 1), program.andors.items.len);
     const andor = program.andors.items[0];
@@ -658,8 +660,10 @@ test "parse simple command with a single word" {
 }
 
 test "parse simple command with arguments" {
-    var parser = Parser.init();
-    const program = parser.run("echo hello world")
+    var debugallocator: std.heap.DebugAllocator(.{}) =.init;
+    const allocator = debugallocator.allocator();
+    var parser = Parser.init(allocator);
+    const program = try parser.run("echo hello world")
         orelse return error.TestExpectedProgram;
 
     const echo: ast.Word = .{ .literal =
@@ -704,8 +708,10 @@ test "parse simple command with arguments" {
 // }
 
 test "parse a two-stage pipeline" {
-    var parser = Parser.init();
-    const program = parser.run("ls | grep foo")
+    var debugallocator: std.heap.DebugAllocator(.{}) =.init;
+    const allocator = debugallocator.allocator();
+    var parser = Parser.init(allocator);
+    const program = try parser.run("ls | grep foo")
         orelse return error.TestExpectedProgram;
 
     const pipeline = program.andors.items[0].pipelines.items[0];
@@ -732,8 +738,10 @@ test "parse a two-stage pipeline" {
 }
 
 test "parse a list with a separator and a backgrounded command" {
-    var parser = Parser.init();
-    const program = parser.run("ls; sleep 1 &")
+    var debugallocator: std.heap.DebugAllocator(.{}) =.init;
+    const allocator = debugallocator.allocator();
+    var parser = Parser.init(allocator);
+    const program = try parser.run("ls; sleep 1 &")
         orelse return error.TestExpectedProgram;
 
     try std.testing.expectEqual(@as(usize, 2), program.andors.items.len);
@@ -763,8 +771,10 @@ test "parse a list with a separator and a backgrounded command" {
 }
 
 test "parse a basic print string" {
-    var parser = Parser.init();
-    const program = parser.run("echo \"Hello World!!!\"")
+    var debugallocator: std.heap.DebugAllocator(.{}) =.init;
+    const allocator = debugallocator.allocator();
+    var parser = Parser.init(allocator);
+    const program = try parser.run("echo \"Hello World!!!\"")
         orelse return error.TestExpectedProgram;
 
     const sc = program.andors.items[0].pipelines.items[0].cmds.items[0].simple_command;
