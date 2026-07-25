@@ -477,10 +477,10 @@ pub const rzvm = struct {
 };
 
 test "Exit" {
-    const rt = Runtime.init();
     var debugallocator: std.heap.DebugAllocator(.{}) =.init;
     const allocator = debugallocator.allocator();
-    var vm = rzvm.init(allocator, std.testing.io, rt);
+    var rt = Runtime.init(allocator);
+    var vm = rzvm.init(allocator, std.testing.io, &rt);
     defer vm.deinit();
     errdefer vm.dump(0, 12);
     const bytecode = [_]inst{
@@ -491,10 +491,10 @@ test "Exit" {
 }
 
 test "load and mov" {
-    const rt = Runtime.init();
     var debugallocator: std.heap.DebugAllocator(.{}) =.init;
     const allocator = debugallocator.allocator();
-    var vm = rzvm.init(allocator, std.testing.io, rt);
+    var rt = Runtime.init(allocator);
+    var vm = rzvm.init(allocator, std.testing.io, &rt);
     defer vm.deinit();
     errdefer vm.dump(0, 12);
     const r0 = 1001;
@@ -509,10 +509,10 @@ test "load and mov" {
 }
 
 test "addition" {
-    const rt = Runtime.init();
     var debugallocator: std.heap.DebugAllocator(.{}) =.init;
     const allocator = debugallocator.allocator();
-    var vm = rzvm.init(allocator, std.testing.io, rt);
+    var rt = Runtime.init(allocator);
+    var vm = rzvm.init(allocator, std.testing.io, &rt);
     defer vm.deinit();
     errdefer vm.dump(0, 12);
     const r0 = 1012;
@@ -540,10 +540,10 @@ test "addition" {
 }
 
 test "subtraction" {
-    const rt = Runtime.init();
     var debugallocator: std.heap.DebugAllocator(.{}) =.init;
     const allocator = debugallocator.allocator();
-    var vm = rzvm.init(allocator, std.testing.io, rt);
+    var rt = Runtime.init(allocator);
+    var vm = rzvm.init(allocator, std.testing.io, &rt);
     defer vm.deinit();
     errdefer vm.dump(0, 12);
     const r0 = 1000;
@@ -575,10 +575,10 @@ test "subtraction" {
 }
 
 test "multiplication" {
-    const rt = Runtime.init();
     var debugallocator: std.heap.DebugAllocator(.{}) =.init;
     const allocator = debugallocator.allocator();
-    var vm = rzvm.init(allocator, std.testing.io, rt);
+    var rt = Runtime.init(allocator);
+    var vm = rzvm.init(allocator, std.testing.io, &rt);
     defer vm.deinit();
     errdefer vm.dump(0, 12);
     const r0 = 1000;
@@ -610,10 +610,10 @@ test "multiplication" {
 }
 
 test "jmp, jz, jnz" {
-    const rt = Runtime.init();
     var debugallocator: std.heap.DebugAllocator(.{}) =.init;
     const allocator = debugallocator.allocator();
-    var vm = rzvm.init(allocator, std.testing.io, rt);
+    var rt = Runtime.init(allocator);
+    var vm = rzvm.init(allocator, std.testing.io, &rt);
     defer vm.deinit();
     errdefer vm.dump(0, 12);
     const r0 = 100;
@@ -645,10 +645,10 @@ test "jmp, jz, jnz" {
 }
 
 test "eql, neq" {
-    const rt = Runtime.init();
     var debugallocator: std.heap.DebugAllocator(.{}) =.init;
     const allocator = debugallocator.allocator();
-    var vm = rzvm.init(allocator, std.testing.io, rt);
+    var rt = Runtime.init(allocator);
+    var vm = rzvm.init(allocator, std.testing.io, &rt);
     defer vm.deinit();
     errdefer vm.dump(0, 12);
     const r0 = 100;
@@ -676,10 +676,10 @@ test "eql, neq" {
 // @TODO(Renzix): Write test for ltn gtn ltne gtne =)
 
 test "call, ret (bytecode)" {
-    const rt = Runtime.init();
     var debugallocator: std.heap.DebugAllocator(.{}) =.init;
     const allocator = debugallocator.allocator();
-    var vm = rzvm.init(allocator, std.testing.io, rt);
+    var rt = Runtime.init(allocator);
+    var vm = rzvm.init(allocator, std.testing.io, &rt);
     defer vm.deinit();
     errdefer vm.dump(0, 12);
     const r0 = vm.runtime.setFunction(5, 2, 3);
@@ -704,10 +704,10 @@ test "call, ret (bytecode)" {
 
 // requires sh to be present in the shell
 test "call, ret (executable)" {
-    const rt = Runtime.init();
     var debugallocator: std.heap.DebugAllocator(.{}) =.init;
     const allocator = debugallocator.allocator();
-    var vm = rzvm.init(allocator, std.testing.io, rt);
+    var rt = Runtime.init(allocator);
+    var vm = rzvm.init(allocator, std.testing.io, &rt);
     defer vm.deinit();
     errdefer vm.dump(0, 12);
     var s0 = str.CreateStaticStr("/bin/sh");
@@ -732,10 +732,10 @@ test "call, ret (executable)" {
 //@TODO(Renzix): test "setio"
 
 test "concat" {
-    const rt = Runtime.init();
     var debugallocator: std.heap.DebugAllocator(.{}) =.init;
     const allocator = debugallocator.allocator();
-    var vm = rzvm.init(allocator, std.testing.io, rt);
+    var rt = Runtime.init(allocator);
+    var vm = rzvm.init(allocator, std.testing.io, &rt);
     defer vm.deinit();
     errdefer vm.dump(0, 12);
 

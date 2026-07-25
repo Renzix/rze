@@ -25,9 +25,9 @@ pub const Runtime = struct {
     variables: [std.math.maxInt(u16)+1]RzValue,
     symbol: std.StringHashMap(u16),
     functions: [1024]Proto, // replace with closures???
-    const allocator = std.heap.c_allocator;
+    allocator: std.mem.Allocator,
 
-    pub fn init() Runtime {
+    pub fn init(allocator: std.mem.Allocator) Runtime {
         var self = Runtime{
             .stdinfd = 0,
             .stdoutfd = 0,
@@ -39,6 +39,7 @@ pub const Runtime = struct {
             .variables = [_]RzValue{RzValue.initErr(RzErr.name_not_found)} ** (std.math.maxInt(u16) + 1),
             .symbol = .init(allocator),
             .functions = undefined,
+            .allocator = allocator,
         };
 
         // some init stuff
@@ -77,7 +78,9 @@ pub const Runtime = struct {
         if (self.symbol.get(name)) |gi| {
             return gi;
         }
-        self.symbol.put(name, self.gi) catch @panic("oom, no space for symbol");
+        // take ownership of the allocation
+        const key = self.allocator.dupe(u8, name) catch @panic("oom, no space for symbol");
+        self.symbol.put(key, self.gi) catch @panic("oom, no space for symbol");
         self.gi += 1;
         return self.gi-1;
     }

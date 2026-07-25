@@ -36,11 +36,12 @@ pub const repl = struct {
             .reader = undefined,
             .allocator = debug_alloc.allocator(),
             // .allocator = std.heap.c_allocator,
-            .runtime = Runtime.init(),
+            .runtime = undefined,
             .parser = undefined,
             .compiler = undefined,
             .vm = undefined,
         };
+        self.runtime = Runtime.init(self.allocator);
         self.parser = p.Parser.init(self.allocator);
         self.compiler = c.Compiler.init(self.allocator, &self.runtime);
         self.vm = v.rzvm.init(self.allocator, self.proc.io, &self.runtime);

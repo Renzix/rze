@@ -158,11 +158,11 @@ pub const Compiler = struct{
 
     pub fn compileWord(self: *Compiler, words: std.ArrayList(ast.Word)) u8 {
         // only use 1 reg by the end
+        // @TODO(Renzix): if too big then use a array or maybe varargs?
         const initReg = self.reg;
         for (words.items) |word| {
             switch (word) {
                 .literal => {
-                    //@TODO(Renzix): if 2 of these happen in a row you can combine them
                     var sX = str.CreateAllocatedStr(word.literal.text, self.allocator);
                     const rX = self.runtime.addConstant(rzval.initString(&sX.header));
                     const reg = self.newReg();
