@@ -50,59 +50,55 @@ pub const Compiler = struct{
     }
 
     pub fn compilePipeline(self: *Compiler, pipeline: ast.Pipeline) void {
-        var pipefds: [128]u8 = undefined;
-        var pipefdcount: u16 = 0;
+        // This is so i can have infinite pipes =) (not that the OS will let me)
         var pipein: u8 = undefined;
+        var pipeout: u8 = undefined;
+        var prevpipein: u8 = undefined;
+        var prevpipeout: u8 = undefined;
         const initReg = self.reg;
+        const pipeRegs = [4]u8{ self.newReg(), self.newReg(), self.newReg(), self.newReg() };
         for (pipeline.cmds.items, 0..) |pl, pindex| {
-            // create fd for stdin and stdout?
             const fds: [2]u8 = blk: {
                 if (pipeline.cmds.items.len==1) {  // real real
-                    const stdinreg = self.newReg();
+                    const loop = (pindex % 2) * 2;
+                    const stdinreg = pipeRegs[loop];
                     const stdinfd = self.runtime.stdinfd;
                     self.emit(inst.iABx(.loadc, stdinreg, stdinfd));
-                    const stdoutreg = self.newReg();
+                    const stdoutreg = pipeRegs[loop+1];
                     const stdoutfd = self.runtime.stdoutfd;
                     self.emit(inst.iABx(.loadc, stdoutreg, stdoutfd));
                     break :blk .{ stdinreg, stdoutreg };
-                }
-                else if((pipeline.cmds.items.len-1)==pindex) { // pipe real
-                    const stdoutreg = self.newReg();
+                } else if((pipeline.cmds.items.len-1)==pindex) { // pipe real
+                    const loop = (pindex % 2) * 2;
+                    const stdoutreg = pipeRegs[loop];
                     const stdoutfd = self.runtime.stdoutfd;
                     self.emit(inst.iABx(.loadc, stdoutreg, stdoutfd));
                     break :blk .{ pipein, stdoutreg };
                 } else if(pindex==0) { // real pipe
-                    pipein = self.newReg(); // pass to next?
-                    const pipeout = self.newReg();
+                    const loop = (pindex % 2) * 2;
+                    pipein = pipeRegs[loop]; // pass to next?
+                    pipeout = pipeRegs[loop+1];
                     self.emit(inst.iABC(.mkpipe, pipein, pipeout, undefined));
-                    pipefds[pipefdcount] = pipein;
-                    pipefdcount += 1;
-                    pipefds[pipefdcount] = pipeout;
-                    pipefdcount += 1;
                     const stdinreg = self.newReg();
                     const stdinfd = self.runtime.stdinfd;
                     self.emit(inst.iABx(.loadc, stdinreg, stdinfd));
                     break :blk .{ stdinreg, pipeout };
                 } else { // pipe pipe
-                    const lastpipein = pipein;
-                    pipein = self.newReg(); // pass to next?
-                    const pipeout = self.newReg();
+                    const loop = (pindex % 2) * 2;
+                    pipein = pipeRegs[loop]; // pass to next?
+                    pipeout = pipeRegs[loop+1];
                     self.emit(inst.iABC(.mkpipe, pipein, pipeout, undefined));
-                    pipefds[pipefdcount] = pipein;
-                    pipefdcount += 1;
-                    pipefds[pipefdcount] = pipeout;
-                    pipefdcount += 1;
-                    break :blk .{ lastpipein, pipeout };
+                    break :blk .{ prevpipein, pipeout };
                 }
             };
             self.emit(inst.iABC(.setio, fds[0], 0x00, undefined)); // stdin
             self.emit(inst.iABC(.setio, fds[1], 0x01, undefined)); // stdout
             self.compileCommand(pl);
-        }
-
-        // @TODO(Renzix): close 3 at a time
-        for (0..pipefdcount) |pipeindex| {
-            self.emit(inst.iABC(.pipeclose, pipefds[pipeindex], undefined, undefined));
+            if (pindex > 0) {
+                self.emit(inst.iABC(.pipeclose, prevpipein, prevpipeout, undefined));
+            }
+            prevpipein = pipein;
+            prevpipeout = pipeout;
         }
 
         self.emit(inst.iABC(.wait, undefined, undefined, undefined));
@@ -119,11 +115,13 @@ pub const Compiler = struct{
 
     pub fn compileSimpleCommand(self: *Compiler, sc: ast.SimpleCommand) void {
         if (sc.cmd!=null) {
+            const initReg = self.reg;
             const exec = self.compileExecutable(sc.cmd.?);
             for (sc.args.items) |arg| {
                 _ = self.compileWord(arg);
             }
             self.emit(inst.iABC(.call, exec, 0x01, @intCast(sc.args.items.len)));
+            self.reg = initReg;
             // @TODO(Renzix): Redirection
         } else {
             for (sc.assignments.items) |assign| {

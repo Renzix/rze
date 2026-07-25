@@ -9,7 +9,7 @@ const v = @import("rzvm/vm.zig");
 
 // In src/repl.zig
 pub const repl = struct {
-    code: [1024]u8,
+    code: [10240]u8,
     code_len: usize,
     proc: std.process.Init,
     stdout_buf: [4096]u8,
@@ -19,7 +19,7 @@ pub const repl = struct {
 
     pub fn init(proc: std.process.Init) repl {
         const self = repl{
-            .code = std.mem.zeroes([1024]u8),
+            .code = std.mem.zeroes([10240]u8),
             .code_len = 0,
             .proc = proc,
             .stdout_buf = undefined,

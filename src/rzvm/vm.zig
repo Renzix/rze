@@ -275,10 +275,9 @@ pub const rzvm = struct {
                             .stdout = rzhelper.toStdIo(self.execcontent.pipe.stdout),
                             .stdin  = rzhelper.toStdIo(self.execcontent.pipe.stdin),
                             .stderr = rzhelper.toStdIo(self.execcontent.pipe.stderr),
-                        }) catch @panic("process couldnt start for some reason");
+                        }) catch |err| std.debug.panic("spawn failed: {s}", .{@errorName(err)});
 
                         self.execcontent.pending.append(allocator, child) catch @panic("oom");
-                        std.debug.assert(self.execcontent.pending.items.len<=256);
                         const i: i48 = @intCast(self.execcontent.pending.items.len-1);
                         self.loadReg(rzval.initInt(i), args.a);
                     },
@@ -372,8 +371,11 @@ pub const rzvm = struct {
             .pipeclose => {
                 const args = ins.args.abc;
                 const a = self.peekReg(args.a);
+                const b = self.peekReg(args.b);
                 std.debug.assert(a.type_info == .fd);
+                std.debug.assert(b.type_info == .fd);
                 _ = std.os.linux.close(@intCast(a.data));
+                _ = std.os.linux.close(@intCast(b.data));
 
                 ins = program[self.pc];
                 self.pc += 1;
