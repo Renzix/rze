@@ -44,10 +44,24 @@ pub const ControlOperatorSet: []const []const u8 = &.{
     ";", ";;", "\n",
     "|", "||"
 };
+
+pub const RedirectOperator = enum {
+    LESS, LESS_LESS, LESS_LESS_DASH,
+    LESS_AMP, LESS_GREAT,
+    GREAT, GREAT_GREAT, GREAT_AMP, GREAT_PIPE,
+};
+
+pub const RedirectOperatorSet: []const []const u8 = &.{
+    "<", "<<", "<<-",
+    "<&", "<>",
+    ">", ">>", ">&", ">|",
+};
+
 // static assert bc every keyword should be in both keyword and keywordset
 comptime {
     std.debug.assert(KeywordSet.len == @typeInfo(Keyword).@"enum".fields.len);
     std.debug.assert(ControlOperatorSet.len == @typeInfo(ControlOperator).@"enum".fields.len);
+    std.debug.assert(RedirectOperatorSet.len == @typeInfo(RedirectOperator).@"enum".fields.len);
 }
 
 fn CharsetFrom(comptime words: []const []const u8) [256]bool {

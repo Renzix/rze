@@ -44,13 +44,13 @@ pub const AssignmentWord = struct {
 };
 
 pub const Redirect = enum {
-    INVALID,   // invalid
-    LESSTHAN,  // <
-    LESSAND,   // <&
-    GREATTHAN, // >
-    DGREAT,    // >>
-    LESSGREAT, // <>
-    CLOBBER,   // >|
+    INVALID,     // invalid
+    LESS,        // <
+    LESS_AMP,    // <&
+    GREAT,       // >
+    GREAT_GREAT, // >>
+    LESS_GREAT,  // <>
+    LESS_PIPE,   // >|
 };
 
 pub const IoRedirection = struct {

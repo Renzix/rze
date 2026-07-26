@@ -7,6 +7,8 @@ const Keyword = @import("token.zig").Keyword;
 const KeywordSet = @import("token.zig").KeywordSet;
 const ControlOperator = @import("token.zig").ControlOperator;
 const ControlOperatorSet = @import("token.zig").ControlOperatorSet;
+const RedirectOperator = @import("token.zig").RedirectOperator;
+const RedirectOperatorSet = @import("token.zig").RedirectOperatorSet;
 const ast = @import("ast.zig");
 
 const helper = @import("token.zig");
@@ -228,85 +230,71 @@ pub const Parser = struct {
 
     fn parseIoFile(self: *Parser) !?ast.IoRedirection {
         if (self.i >= self.code.len) return null;
-        switch(self.code[self.i]) {
-            '>' => {
-                if (self.i+1 < self.code.len) {
-                    switch (self.code[self.i+1]) {
-                        '&' => { // GREATAND >&
-                            // @TODO(Renzix): Implement
-                            log("GREATAND >& is unimplemented", .{});
-                            return ParseErr.Unimplemented;
-                        },
-                        '>' => { // DGREAT >>
-                            // @TODO(Renzix): Implement
-                            log("DGREAT >> is unimplemented", .{});
-                            return ParseErr.Unimplemented;
-                        },
-                        '|' => { // CLOBBER >|
-                            // @TODO(Renzix): Implement
-                            log("CLOBBER >| is unimplemented", .{});
-                            return ParseErr.Unimplemented;
-                        },
-                        else => { // GREATTHAN '>' or invalid
-                            log("Found GREATTHAN: >", .{});
-                            self.i += 1;
-                            _ = self.skipWhitespace();
+        const redir = try self.lexRedirectOperator() orelse return null;
+        switch(redir){
+            .LESS => {
+                log("Found LESSTHAN: <", .{});
+                _ = self.skipWhitespace();
+                // expected filename, io_rediect with no filename
+                const file = try self.lexWord() orelse {
+                    log("io_redirect < failed with no/invalid filename", .{});
+                    return self.fail(ParseDiagnostics.Tag.expected_filename ,self.i+1);
+                };
+                return .{
+                    .typ = ast.Redirect.LESS,
+                    .filename = file
+                };
+            },
+            .LESS_LESS => {
+                // @TODO(Renzix): Implement
+                log("LESS_LESS << is unimplemented", .{});
+                return ParseErr.Unimplemented;
+            },
+            .LESS_LESS_DASH => {
+                // @TODO(Renzix): Implement
+                log("LESS_LESS_DASH <<- is unimplemented", .{});
+                return ParseErr.Unimplemented;
+            },
+            .LESS_AMP => {
+                // @TODO(Renzix): Implement
+                log("LESS_AMP <& is unimplemented", .{});
+                return ParseErr.Unimplemented;
+            },
+            .LESS_GREAT => {
+                // @TODO(Renzix): Implement
+                log("LESS_GREAT <> is unimplemented", .{});
+                return ParseErr.Unimplemented;
+            },
+            .GREAT => {
+                log("Found GREAT: >", .{});
+                _ = self.skipWhitespace();
 
-                            const file = try self.lexWord();
-                            if(file==null) {
-                                log("io_redirect > failed with no/invalid filename", .{});
-                                return self.fail(ParseDiagnostics.Tag.expected_filename ,self.i+1);
-                            }
-                            return .{
-                                .typ = ast.Redirect.GREATTHAN,
-                                .filename = file.?
-                            };
-                        }
-                    }
-                } else {
-                    // parse error, io_redirect with no filename
-                    log("io_redirect > failed with no filename, found eof", .{});
+                const file = try self.lexWord() orelse {
+                    log("io_redirect > failed with no/invalid filename", .{});
                     return self.fail(ParseDiagnostics.Tag.expected_filename ,self.i+1);
-                }
+                };
+                return .{
+                    .typ = ast.Redirect.GREAT,
+                    .filename = file
+                };
             },
-            '<' => {
-                if (self.i+1 < self.code.len) {
-                    switch (self.code[self.i+1]) {
-                        '&' => { // LESSAND <&
-                            log("LESSTHAN <& is unimplemented", .{});
-                            return ParseErr.Unimplemented;
-                        },
-                        '>' => { // LESSGREAT <>
-                            log("LESSGREAT <> is unimplemented", .{});
-                            return ParseErr.Unimplemented;
-                        },
-                        else => { // LESSTHAN '<' or invalid
-                            log("Found LESSTHAN: <", .{});
-                            self.i += 1;
-                            _ = self.skipWhitespace();
-                            // expected filename, io_rediect with no filename
-                            const file = try self.lexWord();
-                            if(file==null) {
-                                log("io_redirect < failed with no/invalid filename", .{});
-                                return self.fail(ParseDiagnostics.Tag.expected_filename ,self.i+1);
-                            }
-                            return .{
-                                .typ = ast.Redirect.LESSTHAN,
-                                .filename = file.?
-                            };
-                        }
-                    }
-                } else {
-                    // parse error, io_redirect with no filename
-                    log("io_redirect < failed with no filename, found eof", .{});
-                    return self.fail(ParseDiagnostics.Tag.expected_filename ,self.i+1);
-                }
+            .GREAT_GREAT => {
+                // @TODO(Renzix): Implement
+                log("GREAT_GREAT >> is unimplemented", .{});
+                return ParseErr.Unimplemented;
             },
-            else => {
-                return null;
+            .GREAT_AMP => {
+                // @TODO(Renzix): Implement
+                log("GREAT_AMP >& is unimplemented", .{});
+                return ParseErr.Unimplemented;
+            },
+            .GREAT_PIPE => {
+                // @TODO(Renzix): Implement
+                log("GREAT_PIPE >| is unimplemented", .{});
+                return ParseErr.Unimplemented;
             },
         }
-        return null;
+        unreachable;
     }
 
     fn lexWord(self: *Parser) !?std.ArrayList(ast.Word) {
@@ -692,6 +680,65 @@ pub const Parser = struct {
         unreachable;
     }
 
+    fn lexRedirectOperator(self: *Parser) !?RedirectOperator {
+        if (self.i < self.code.len) {
+            switch(self.code[self.i]) {
+                '>' => {
+                    self.i += 1;
+                    if (self.i >= self.code.len)
+                        return .GREAT;
+                    switch(self.code[self.i]) {
+                        '>' => {
+                            self.i += 1;
+                            return .GREAT_GREAT;
+                        },
+                        '&' => {
+                            self.i += 1;
+                            return .GREAT_AMP;
+                        },
+                        '|' => {
+                            self.i += 1;
+                            return .GREAT_PIPE;
+                        },
+                        else => return .GREAT,
+                    }
+                },
+                '<' => {
+                    self.i += 1;
+                    if (self.i >= self.code.len)
+                        return .LESS;
+                    switch(self.code[self.i]) {
+                        '<' => {
+                            self.i += 1;
+                            if (self.i < self.code.len and self.code[self.i] == '-') {
+                                self.i += 1;
+                                return .LESS_LESS_DASH;
+                            } else {
+                                return .LESS_LESS;
+                            }
+                        },
+                        '&' => {
+                            self.i += 1;
+                            return .LESS_AMP;
+                        },
+                        '>' => {
+                            self.i += 1;
+                            return .LESS_GREAT;
+                        },
+                        else => return .LESS,
+                    }
+                },
+                else => {
+                    return null;
+                },
+            }
+        } else {
+            return null;
+        }
+        unreachable;
+    }
+
+    // if you want a specific operator then use this, else use the other one
     fn lexComptimeControlOperator(self: *Parser, comptime oper: ControlOperator) bool {
         const start = self.i;
         for (ControlOperatorSet[@intFromEnum(oper)]) |char| {
@@ -710,6 +757,28 @@ pub const Parser = struct {
             return false;
         }
         log("Found Operator: {s}", .{ControlOperatorSet[@intFromEnum(oper)]});
+        return true;
+    }
+
+    // if you want a specific operator then use this, else use the other one
+    fn lexComptimeRedirectOperator(self: *Parser, comptime oper: RedirectOperator) bool {
+        const start = self.i;
+        for (RedirectOperatorSet[@intFromEnum(oper)]) |char| {
+            if(self.i >= self.code.len or self.code[self.i]!=char) {
+                self.i=start;
+                return false;
+            }
+            self.i+=1;
+        }
+        // control operators require the next char to NOT be another control operator
+        // ie if i want PIPE then i need to ensure the next char after PIPE is not
+        // another PIPE (so echo `abc || cat` doesnt turn into `echo abc | | cat`)
+        // we generate the possible char array at comptime
+        if (self.i < self.code.len and helper.RedirectOperatorNextCharset(oper)[self.code[self.i]]) {
+            self.i = start;
+            return false;
+        }
+        log("Found Operator: {s}", .{RedirectOperatorSet[@intFromEnum(oper)]});
         return true;
     }
 
