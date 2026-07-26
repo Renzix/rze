@@ -18,7 +18,6 @@ pub const repl = struct {
     writer: std.Io.File.Writer,
     reader: std.Io.File.Reader,
     allocator: std.mem.Allocator,
-    runtime: Runtime,
     parser: p.Parser,
     compiler: c.Compiler,
     vm: v.rzvm,
@@ -36,15 +35,14 @@ pub const repl = struct {
             .reader = undefined,
             .allocator = debug_alloc.allocator(),
             // .allocator = std.heap.c_allocator,
-            .runtime = undefined,
             .parser = undefined,
             .compiler = undefined,
             .vm = undefined,
         };
-        self.runtime = Runtime.init(self.allocator);
+        var runtime = Runtime.init(self.allocator, self.proc);
         self.parser = p.Parser.init(self.allocator);
-        self.compiler = c.Compiler.init(self.allocator, &self.runtime);
-        self.vm = v.rzvm.init(self.allocator, self.proc.io, &self.runtime);
+        self.compiler = c.Compiler.init(self.allocator, &runtime);
+        self.vm = v.rzvm.init(self.allocator, self.proc.io, &runtime);
         return self;
     }
     pub fn run(self: *repl) void {

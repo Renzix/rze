@@ -15,7 +15,7 @@ pub const TypeInfo = enum(u8) {
     fd = 0b1010,
     err = 0b1011,
     boolean = 0b1100,
-    // exec_function = 0b1101,
+    env = 0b1101,
     frame = 0b1110,
 };
 
@@ -79,6 +79,12 @@ pub const RzValue = packed struct(u64) {
     pub fn initString(val: *const str.StringHeader) RzValue {
         const raw: u48 = @intCast(@intFromPtr(val));
         return init(TypeInfo.string, true, false, false, GcBit.white, raw);
+    }
+
+    // static strings are always ptrs for now
+    pub fn initEnv(val: *const str.StringHeader) RzValue {
+        const raw: u48 = @intCast(@intFromPtr(val));
+        return init(TypeInfo.env, true, false, false, GcBit.white, raw);
     }
 
     pub fn initErr(err: RzErr) RzValue {

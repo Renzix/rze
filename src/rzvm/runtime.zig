@@ -1,6 +1,7 @@
 const std = @import("std");
 const RzValue = @import("rzvalue.zig").RzValue;
 const RzErr = @import("rzvalue.zig").RzErr;
+const str = @import("datatypes/string.zig");
 const StringHeader = @import("datatypes/string.zig").StringHeader;
 
 pub const Proto = struct {
@@ -27,7 +28,7 @@ pub const Runtime = struct {
     functions: [1024]Proto, // replace with closures???
     allocator: std.mem.Allocator,
 
-    pub fn init(allocator: std.mem.Allocator) Runtime {
+    pub fn init(allocator: std.mem.Allocator, proc: std.process.Init) Runtime {
         var self = Runtime{
             .stdinfd = 0,
             .stdoutfd = 0,
@@ -46,6 +47,13 @@ pub const Runtime = struct {
         self.stdinfd = @intCast(self.addConstant(RzValue.initFd(0)));
         self.stdoutfd = @intCast(self.addConstant(RzValue.initFd(1)));
         self.stderrfd = @intCast(self.addConstant(RzValue.initFd(2)));
+
+        // environment variables
+        const map = proc.environ_map;
+        for (map.keys(), map.values()) |k, v| {
+            var r0 = str.CreateAllocatedStr(v, allocator);
+            _ = self.addGlobal(k, RzValue.initString(&r0.header));
+        }
 
         return self;
     }
@@ -86,6 +94,7 @@ pub const Runtime = struct {
     }
 
     pub fn addConstant(self: *Runtime, value: RzValue) u16 {
+        if (self.ci >= 10000) @panic("Too many constants");
         self.constants[self.ci] = value;
         self.ci += 1;
         return self.ci-1;
