@@ -219,13 +219,18 @@ pub const Parser = struct {
         return found;
     }
 
-    // @TODO(DeBruno): Add io_here and maybe io_location
+    // @TODO(Renzix): Add io_here and maybe io_location
     fn parseIoRedirect(self: *Parser) !bool {
-        // var found = false;
+        const start=self.i;
         _ = self.skipWhitespace();
         // self.lexIoNumber();
-        _ = try self.parseIoFile();
-        return false;
+        const io = try self.parseIoFile();
+        if (io!=null) {
+            return true;
+        } else{
+            self.i = start;
+            return false;
+        }
     }
 
     fn parseIoFile(self: *Parser) !?ast.IoRedirection {
@@ -265,7 +270,7 @@ pub const Parser = struct {
                 log("LESS_GREAT <> is unimplemented", .{});
                 return ParseErr.Unimplemented;
             },
-            .GREAT => {
+            inline .GREAT, .GREAT_GREAT => |g| {
                 log("Found GREAT: >", .{});
                 _ = self.skipWhitespace();
 
@@ -273,15 +278,15 @@ pub const Parser = struct {
                     log("io_redirect > failed with no/invalid filename", .{});
                     return self.fail(ParseDiagnostics.Tag.expected_filename ,self.i);
                 };
+                const t = switch(g) {
+                    .GREAT => ast.Redirect.GREAT,
+                    .GREAT_GREAT => ast.Redirect.GREAT_GREAT,
+                    else => unreachable,
+                };
                 return .{
-                    .typ = ast.Redirect.GREAT,
+                    .typ = t,
                     .filename = file
                 };
-            },
-            .GREAT_GREAT => {
-                // @TODO(Renzix): Implement
-                log("GREAT_GREAT >> is unimplemented", .{});
-                return ParseErr.Unimplemented;
             },
             .GREAT_AMP => {
                 // @TODO(Renzix): Implement

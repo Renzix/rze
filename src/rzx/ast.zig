@@ -46,6 +46,7 @@ pub const AssignmentWord = struct {
 pub const Redirect = enum {
     INVALID,     // invalid
     LESS,        // <
+    LESS_LESS,   // <<
     LESS_AMP,    // <&
     GREAT,       // >
     GREAT_GREAT, // >>
