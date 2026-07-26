@@ -238,7 +238,7 @@ pub const Parser = struct {
                 // expected filename, io_rediect with no filename
                 const file = try self.lexWord() orelse {
                     log("io_redirect < failed with no/invalid filename", .{});
-                    return self.fail(ParseDiagnostics.Tag.expected_filename ,self.i+1);
+                    return self.fail(ParseDiagnostics.Tag.expected_filename ,self.i);
                 };
                 return .{
                     .typ = ast.Redirect.LESS,
@@ -271,7 +271,7 @@ pub const Parser = struct {
 
                 const file = try self.lexWord() orelse {
                     log("io_redirect > failed with no/invalid filename", .{});
-                    return self.fail(ParseDiagnostics.Tag.expected_filename ,self.i+1);
+                    return self.fail(ParseDiagnostics.Tag.expected_filename ,self.i);
                 };
                 return .{
                     .typ = ast.Redirect.GREAT,
@@ -515,8 +515,6 @@ pub const Parser = struct {
                             try w.append(self.allocator, lit);
                             log("Found Unquoted: |{s}|", .{lit.literal.text});
                         }
-                        // @TODO(Renzix): Handle "echo $ ",
-                        // in this case $ should be literal
                         const ok = switch (ch) {
                             '"' => try self.lexDoubleQuote(w),
                             '\'' => try self.lexSingleQuote(w),
