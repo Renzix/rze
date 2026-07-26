@@ -3,6 +3,10 @@ const log = @import("std").log.debug;
 
 const TokenType = @import("token.zig").TokenType;
 const Quoted = @import("token.zig").Quoted;
+const Keyword = @import("token.zig").Keyword;
+const KeywordSet = @import("token.zig").KeywordSet;
+const ControlOperator = @import("token.zig").ControlOperator;
+const ControlOperatorSet = @import("token.zig").ControlOperatorSet;
 const ast = @import("ast.zig");
 
 const helper = @import("token.zig");
@@ -12,7 +16,6 @@ const helper = @import("token.zig");
 // @TODO(Renzix): Command subsitution and backtick $() ``
 // @TODO(Renzix): Heredocs <<<
 // @TODO(Renzix): Redirection consumed but discarded, need to add more redirection
-// @TODO(Renzix): !foo is a command but being parsed as a pipeline
 // @TODO(Renzix): Comments
 // @TODO(Renzix): Store current program state in error
 // @TODO(Renzix): && value is parsed as valid syntax (should error)
@@ -65,13 +68,13 @@ pub const Parser = struct {
             } else {
                 break;
             }
-            if (self.lexChar('&')) {
+            if (self.lexControlOperator(ControlOperator.AMP)) {
                 try program.background.append(self.allocator, true);
                 continue;
             } else {
                 try program.background.append(self.allocator, false);
             }
-            if (self.lexChar(';')) {
+            if (self.lexControlOperator(ControlOperator.SEMI)) {
                 continue;
             }
             break;
@@ -87,13 +90,13 @@ pub const Parser = struct {
                 try andor.pipelines.append(self.allocator, p);
             }
             _ = self.skipWhitespace();
-            if (self.lexString("&&")) {
+            if (self.lexControlOperator(ControlOperator.AMP_AMP)) {
                 try andor.and_or_list.append(self.allocator, ast.AndOrIf.and_if);
                 _ = self.skipWhitespace();
                 _ = self.skipNewlines();
                 continue;
             }
-            if (self.lexString("||")) {
+            if (self.lexControlOperator(ControlOperator.PIPE_PIPE)) {
                 try andor.and_or_list.append(self.allocator, ast.AndOrIf.or_if);
                 _ = self.skipWhitespace();
                 _ = self.skipNewlines();
@@ -108,13 +111,16 @@ pub const Parser = struct {
     fn parsePipeline(self: *Parser) !?ast.Pipeline {
         var pipeline: ast.Pipeline = .{ .bang = false, .cmds = .empty };
         _ = self.skipWhitespace();
-        if(self.lexChar('!')) pipeline.bang = true;
+        if (self.lexKeyword(Keyword.BANG)) {
+            pipeline.bang = true;
+            _ = self.skipWhitespace();
+        }
         while(true) {
             if (try self.parseCommand()) |cmd| {
                 try pipeline.cmds.append(self.allocator, cmd);
             }
             _ = self.skipWhitespace();
-            if (self.lexChar('|')) {
+            if (self.lexControlOperator(ControlOperator.PIPE)) {
                 _ = self.skipWhitespace();
                 _ = self.skipNewlines();
                 continue;
@@ -122,7 +128,7 @@ pub const Parser = struct {
             break;
         }
         // if we have no commands then we failed to parse...
-        if (pipeline.cmds.items.len>0 or pipeline.bang == true)
+        if (pipeline.cmds.items.len>0)
             return pipeline
         else
             return null;
@@ -600,6 +606,45 @@ pub const Parser = struct {
             self.i+=1;
         }
         log("Found String: {s}", .{str});
+        return true;
+    }
+
+    fn lexKeyword(self: *Parser, comptime kw: Keyword) bool {
+        const start = self.i;
+        for (KeywordSet[@intFromEnum(kw)]) |char| {
+            if(self.i >= self.code.len or self.code[self.i]!=char) {
+                self.i=start;
+                return false;
+            }
+            self.i+=1;
+        }
+        // keywords require a delim after it
+        if (self.i < self.code.len and !helper.DelimChars[self.code[self.i]]) {
+            self.i=start;
+            return false;
+        }
+        log("Found Keyword: {s}", .{KeywordSet[@intFromEnum(kw)]});
+        return true;
+    }
+
+    fn lexControlOperator(self: *Parser, comptime oper: ControlOperator) bool {
+        const start = self.i;
+        for (ControlOperatorSet[@intFromEnum(oper)]) |char| {
+            if(self.i >= self.code.len or self.code[self.i]!=char) {
+                self.i=start;
+                return false;
+            }
+            self.i+=1;
+        }
+        // control operators require the next char to NOT be another control operator
+        // ie if i want PIPE then i need to ensure the next char after PIPE is not
+        // another PIPE (so echo `abc || cat` doesnt turn into `echo abc | | cat`)
+        // we generate the possible char array at comptime
+        if (self.i < self.code.len and helper.ControlOperatorNextCharset(oper)[self.code[self.i]]) {
+            self.i = start;
+            return false;
+        }
+        log("Found Operator: {s}", .{ControlOperatorSet[@intFromEnum(oper)]});
         return true;
     }
 
