@@ -18,6 +18,7 @@ const helper = @import("token.zig");
 // @TODO(Renzix): Redirection consumed but discarded, need to add more redirection
 // @TODO(Renzix): Comments
 // @TODO(Renzix): Store current program state in error
+// @TODO(Renzix): | echo a is being parsed as valid and so is echo a | | cat
 // @TODO(Renzix): && value is parsed as valid syntax (should error)
 // @TODO(Renzix): Testing for "${var}", "pre${var}post", echo "x$HOME.y"z, a\ b,
 //                ls -l, echo $, echo "", !foo
