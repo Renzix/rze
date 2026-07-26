@@ -18,8 +18,6 @@ const helper = @import("token.zig");
 // @TODO(Renzix): Redirection consumed but discarded, need to add more redirection
 // @TODO(Renzix): Comments
 // @TODO(Renzix): Store current program state in error
-// @TODO(Renzix): | echo a is being parsed as valid and so is echo a | | cat
-// @TODO(Renzix): && value is parsed as valid syntax (should error)
 // @TODO(Renzix): Testing for "${var}", "pre${var}post", echo "x$HOME.y"z, a\ b,
 //                ls -l, echo $, echo "", !foo
 // @TODO(Renzix): Globbing \* is different from *
@@ -28,10 +26,19 @@ const helper = @import("token.zig");
 
 const ParseErr = error{
     Unimplemented,
-    ExpectedFileName,
-    UnterminatedSingleQuote,
-    UnterminatedDoubleQuote,
+    SyntaxError,
     OutOfMemory,
+};
+
+const ParseDiagnostics = struct {
+    tag: Tag,
+    pos: usize,
+    pub const Tag = enum {
+        expected_filename,
+        expected_command,
+        unexpected_token,
+        unclosed_quote,
+    };
 };
 
 // we parse and lex at the same time for shell!!!
@@ -41,12 +48,14 @@ pub const Parser = struct {
     code: []const u8,
     i: usize,
     allocator: std.mem.Allocator,
+    diag: ParseDiagnostics,
 
     pub fn init(alloc: std.mem.Allocator) Parser {
         return Parser{
             .code = undefined,
             .i = 0,
             .allocator = alloc,
+            .diag = undefined,
         };
     }
 
@@ -64,22 +73,23 @@ pub const Parser = struct {
     fn parseCompleteCommandList(self: *Parser) !?ast.Program {
         var program: ast.Program = .{ .andors = .empty, .background = .empty };
         while (true) {
-            if(try self.parseAndOr()) |andor| {
-                try program.andors.append(self.allocator, andor);
-            } else {
-                break;
+            const andor = try self.parseAndOr() orelse break;
+            try program.andors.append(self.allocator, andor);
+
+            const start = self.i;
+            const oper = (try self.lexControlOperator());
+            try program.background.append(self.allocator, oper==.AMP);
+            switch (oper orelse break) {
+                .AMP, .SEMI, .NEWLINE => {},
+                else => {
+                    self.i = start;
+                    break;
+                },
             }
-            if (self.lexControlOperator(ControlOperator.AMP)) {
-                try program.background.append(self.allocator, true);
-                continue;
-            } else {
-                try program.background.append(self.allocator, false);
-            }
-            if (self.lexControlOperator(ControlOperator.SEMI)) {
-                continue;
-            }
-            break;
         }
+        _ = self.skipWhitespace();
+        _ = self.skipNewlines();
+        if (self.i < self.code.len) return self.fail(.unexpected_token, self.i); // make better
         std.debug.assert(program.andors.items.len == program.background.items.len);
         if (program.andors.items.len > 0) return program else return null;
     }
@@ -87,23 +97,23 @@ pub const Parser = struct {
     fn parseAndOr(self: *Parser) !?ast.AndOr {
         var andor: ast.AndOr = .{ .pipelines = .empty, .and_or_list = .empty };
         while (true) {
-            if (try self.parsePipeline()) |p| {
-                try andor.pipelines.append(self.allocator, p);
-            }
+            const p = try self.parsePipeline() orelse break;
+            try andor.pipelines.append(self.allocator, p);
+
             _ = self.skipWhitespace();
-            if (self.lexControlOperator(ControlOperator.AMP_AMP)) {
-                try andor.and_or_list.append(self.allocator, ast.AndOrIf.and_if);
-                _ = self.skipWhitespace();
-                _ = self.skipNewlines();
-                continue;
-            }
-            if (self.lexControlOperator(ControlOperator.PIPE_PIPE)) {
-                try andor.and_or_list.append(self.allocator, ast.AndOrIf.or_if);
-                _ = self.skipWhitespace();
-                _ = self.skipNewlines();
-                continue;
-            }
-            break;
+            const start = self.i;
+            const oper = (try self.lexControlOperator()) orelse break;
+            const a = switch (oper) {
+                .AMP_AMP => ast.AndOrIf.and_if,
+                .PIPE_PIPE => ast.AndOrIf.or_if,
+                else => {
+                    self.i = start;
+                    break;
+                },
+            };
+            try andor.and_or_list.append(self.allocator, a);
+            _ = self.skipWhitespace();
+            _ = self.skipNewlines();
         }
         if (andor.pipelines.items.len>0) return andor else return null;
     }
@@ -121,7 +131,7 @@ pub const Parser = struct {
                 try pipeline.cmds.append(self.allocator, cmd);
             }
             _ = self.skipWhitespace();
-            if (self.lexControlOperator(ControlOperator.PIPE)) {
+            if (self.lexComptimeControlOperator(ControlOperator.PIPE)) {
                 _ = self.skipWhitespace();
                 _ = self.skipNewlines();
                 continue;
@@ -140,8 +150,10 @@ pub const Parser = struct {
         // compound command and optional redirect
         if (try self.parseSimpleCommand()) |sc| {
             return .{ .simple_command = sc };
+        } else {
+            // return ParseErr.Unimplemented;
+            return null;
         }
-        return null;
     }
     fn parseSimpleCommand(self: *Parser) !?ast.SimpleCommand {
         var sc: ast.SimpleCommand = .{
@@ -210,11 +222,11 @@ pub const Parser = struct {
         // var found = false;
         _ = self.skipWhitespace();
         // self.lexIoNumber();
-        _ = try self.lexIoFile();
+        _ = try self.parseIoFile();
         return false;
     }
 
-    fn lexIoFile(self: *Parser) !?ast.IoRedirection {
+    fn parseIoFile(self: *Parser) !?ast.IoRedirection {
         if (self.i >= self.code.len) return null;
         switch(self.code[self.i]) {
             '>' => {
@@ -243,7 +255,7 @@ pub const Parser = struct {
                             const file = try self.lexWord();
                             if(file==null) {
                                 log("io_redirect > failed with no/invalid filename", .{});
-                                return ParseErr.ExpectedFileName;
+                                return self.fail(ParseDiagnostics.Tag.expected_filename ,self.i+1);
                             }
                             return .{
                                 .typ = ast.Redirect.GREATTHAN,
@@ -254,7 +266,7 @@ pub const Parser = struct {
                 } else {
                     // parse error, io_redirect with no filename
                     log("io_redirect > failed with no filename, found eof", .{});
-                    return ParseErr.ExpectedFileName;
+                    return self.fail(ParseDiagnostics.Tag.expected_filename ,self.i+1);
                 }
             },
             '<' => {
@@ -276,7 +288,7 @@ pub const Parser = struct {
                             const file = try self.lexWord();
                             if(file==null) {
                                 log("io_redirect < failed with no/invalid filename", .{});
-                                return ParseErr.ExpectedFileName;
+                                return self.fail(ParseDiagnostics.Tag.expected_filename ,self.i+1);
                             }
                             return .{
                                 .typ = ast.Redirect.LESSTHAN,
@@ -287,7 +299,7 @@ pub const Parser = struct {
                 } else {
                     // parse error, io_redirect with no filename
                     log("io_redirect < failed with no filename, found eof", .{});
-                    return ParseErr.ExpectedFileName;
+                    return self.fail(ParseDiagnostics.Tag.expected_filename ,self.i+1);
                 }
             },
             else => {
@@ -326,7 +338,7 @@ pub const Parser = struct {
                 else => {},
             }
             self.i += 1;
-        } else return ParseErr.UnterminatedSingleQuote;
+        } else return self.fail(ParseDiagnostics.Tag.unclosed_quote ,self.i-1);
         const lit: ast.Word = .{
             .literal = .{
                 .text = self.code[start+1..self.i],
@@ -394,7 +406,7 @@ pub const Parser = struct {
                 else => {},
             }
             self.i += 1;
-        } else return ParseErr.UnterminatedDoubleQuote;
+        } else return self.fail(ParseDiagnostics.Tag.unclosed_quote ,self.i-1);
         // in the case of expand this can end up producing "" followed by $var
         // followed by "", lets ignore the ""
         if (self.i > start) {
@@ -628,7 +640,59 @@ pub const Parser = struct {
         return true;
     }
 
-    fn lexControlOperator(self: *Parser, comptime oper: ControlOperator) bool {
+    fn lexControlOperator(self: *Parser) !?ControlOperator {
+        if (self.i < self.code.len) {
+            switch(self.code[self.i]) {
+                '&' => {
+                    self.i += 1;
+                    if (self.i < self.code.len and self.code[self.i] == '&') {
+                        self.i += 1;
+                        return .AMP_AMP;
+                    } else {
+                        return .AMP;
+                    }
+                },
+                '(' => {
+                    self.i += 1;
+                    return .LPAREN;
+                },
+                ')' => {
+                    self.i += 1;
+                    return .RPAREN;
+                },
+                ';' => {
+                    self.i += 1;
+                    if (self.i < self.code.len and self.code[self.i] == ';') {
+                        self.i += 1;
+                        return .SEMI_SEMI;
+                    } else {
+                        return .SEMI;
+                    }
+                },
+                '\n' => {
+                    self.i += 1;
+                    return .NEWLINE;
+                },
+                '|' => {
+                    self.i += 1;
+                    if (self.i < self.code.len and self.code[self.i] == '|') {
+                        self.i += 1;
+                        return .PIPE_PIPE;
+                    } else {
+                        return .PIPE;
+                    }
+                },
+                else => {
+                    return null;
+                },
+            }
+        } else {
+            return null;
+        }
+        unreachable;
+    }
+
+    fn lexComptimeControlOperator(self: *Parser, comptime oper: ControlOperator) bool {
         const start = self.i;
         for (ControlOperatorSet[@intFromEnum(oper)]) |char| {
             if(self.i >= self.code.len or self.code[self.i]!=char) {
@@ -680,6 +744,11 @@ pub const Parser = struct {
         const start = self.i;
         while (self.i<self.code.len and self.code[self.i]=='\n') self.i+=1;
         return self.i - start;
+    }
+
+    fn fail(self: *Parser, tag: ParseDiagnostics.Tag, pos: usize) ParseErr {
+        self.diag = .{ .tag = tag, .pos = pos };
+        return error.SyntaxError;
     }
 };
 

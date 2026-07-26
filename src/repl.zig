@@ -1,4 +1,5 @@
 const std = @import("std");
+const print = @import("std").debug.print;
 
 // const l = @import("rzl/lexer.zig");
 // const p = @import("rzl/parser.zig");
@@ -75,10 +76,33 @@ pub const repl = struct {
         const prog = self.code[0..self.code_len];
 
         const ast = self.parser.run(prog) catch |err| {
-            // @TODO(Renzix): Move all this terminal stuff to a seperate file
-            std.debug.print("\x1b[91m\x1b[1m--------- PARSER ERROR --------\n", .{});
-            std.debug.print("err: {any}\n", .{err});
-            std.debug.print("-------------------------------\n\x1b[0m", .{});
+            // @TODO(Renzix): Move all this terminal stuff to a seperate file and probably write a
+            // smaller version for the repl specifically
+            print("\x1b[91m\x1b[1m--------- PARSER ERROR --------\n", .{});
+            print("error: {t}\n", .{err});
+            switch (err) {
+                error.SyntaxError => {
+                    const code       = self.parser.code;
+                    const pos        = self.parser.diag.pos;
+                    const code_start = if (std.mem.lastIndexOfScalar(u8, code[0..pos], '\n')) |n| n + 1 else 0;
+                    const code_end   = std.mem.indexOfScalarPos(u8, code, pos, '\n') orelse code.len;
+                    const code_str   = code[code_start..code_end];
+                    const column     = pos - code_start;
+                    const lineno     = std.mem.count(u8, code[0..code_start], "\n") + 1;
+                    print("line:  {}\n", .{lineno});
+                    print("code:  {s}\n", .{code_str});
+                    print("       ", .{});
+                    for (code_str[0..column]) |col| {
+                        print("{c}", .{@as(u8, if (col == '\t') '\t' else ' ')});
+                    }
+                    print("^\n", .{});
+                },
+                error.Unimplemented => {
+                    print("Send patches\n", .{});
+                },
+                else => {},
+            }
+            print("-------------------------------\n\x1b[0m", .{});
             return;
         };
 
