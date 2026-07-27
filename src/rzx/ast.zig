@@ -54,9 +54,15 @@ pub const Redirect = enum {
     GREAT_PIPE,   // >|
 };
 
+pub const TargetTypes = enum { filename, fd };
+pub const Target = union(TargetTypes) {
+    filename: std.ArrayList(Word),
+    fd: u8,
+};
 pub const IoRedirection = struct {
     typ: Redirect,
-    filename: std.ArrayList(Word),
+    target: Target,
+    fd: ?u8,
 };
 
 pub const ExpandTypes = enum { variable, variable_bracket, command };

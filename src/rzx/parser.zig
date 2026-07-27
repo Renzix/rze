@@ -223,8 +223,8 @@ pub const Parser = struct {
     fn parseIoRedirect(self: *Parser) !bool {
         const start=self.i;
         _ = self.skipWhitespace();
-        // self.lexIoNumber();
-        const io = try self.parseIoFile();
+        const input = self.lexIoNumber();
+        const io = try self.parseIoFile(input);
         if (io!=null) {
             return true;
         } else{
@@ -233,7 +233,18 @@ pub const Parser = struct {
         }
     }
 
-    fn parseIoFile(self: *Parser) !?ast.IoRedirection {
+    fn lexIoNumber(self: *Parser) ?u8 {
+        if (self.i >= self.code.len) return null;
+        switch (self.code[self.i]) {
+            '0'...'9' => |n| {
+                self.i += 1;
+                return n;
+            },
+            else => return null,
+        }
+    }
+
+    fn parseIoFile(self: *Parser, input: ?u8) !?ast.IoRedirection {
         if (self.i >= self.code.len) return null;
         const redir = try self.lexRedirectOperator() orelse return null;
         switch(redir){
@@ -256,7 +267,8 @@ pub const Parser = struct {
                 };
                 return .{
                     .typ = t,
-                    .filename = file
+                    .target = .{ .filename = file },
+                    .fd = input,
                 };
             },
             .LESS_LESS => {
@@ -528,6 +540,19 @@ pub const Parser = struct {
                         if(!ok) return false;
                         start = self.i;
                         continue;
+                    },
+                    '0'...'9' => {
+                        // `echo abc 1>f && cat f` prints abc
+                        // `echo abc 11>f && cat f` prints abc 11
+                        //                       =)
+                        // so if we have a literal 1 char number then pass it on
+                        // to do the io redirect, its not a word
+                        if (((self.i+1) < self.code.len) and (start==self.i)) {
+                            switch (self.code[self.i+1]) {
+                                '<', '>' => return false,
+                                else => {},
+                            }
+                        }
                     },
                     else => {},
                 }
