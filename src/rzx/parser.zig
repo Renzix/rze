@@ -251,6 +251,7 @@ pub const Parser = struct {
                     .GREAT_GREAT => ast.Redirect.GREAT_GREAT,
                     .LESS_GREAT => ast.Redirect.LESS_GREAT,
                     .GREAT_PIPE => ast.Redirect.GREAT_PIPE,
+                    .LESS => ast.Redirect.LESS,
                     else => unreachable,
                 };
                 return .{
