@@ -44,14 +44,15 @@ pub const AssignmentWord = struct {
 };
 
 pub const Redirect = enum {
-    INVALID,     // invalid
-    LESS,        // <
-    LESS_LESS,   // <<
-    LESS_AMP,    // <&
-    GREAT,       // >
-    GREAT_GREAT, // >>
-    LESS_GREAT,  // <>
-    GREAT_PIPE,   // >|
+    LESS,           // <
+    LESS_LESS,      // <<
+    LESS_LESS_DASH, // <<-
+    LESS_AMP,       // <&
+    LESS_GREAT,     // <>
+    GREAT,          // >
+    GREAT_GREAT,    // >>
+    GREAT_PIPE,     // >|
+    GREAT_AMP,      // >&
 };
 
 pub const TargetTypes = enum { filename, fd };
