@@ -237,31 +237,16 @@ pub const Parser = struct {
         if (self.i >= self.code.len) return null;
         const redir = try self.lexRedirectOperator() orelse return null;
         switch(redir){
-            .LESS_LESS => {
-                // @TODO(Renzix): Implement
-                log("LESS_LESS << is unimplemented", .{});
-                return ParseErr.Unimplemented;
-            },
-            .LESS_LESS_DASH => {
-                // @TODO(Renzix): Implement
-                log("LESS_LESS_DASH <<- is unimplemented", .{});
-                return ParseErr.Unimplemented;
-            },
-            .LESS_AMP => {
-                // @TODO(Renzix): Implement
-                log("LESS_AMP <& is unimplemented", .{});
-                return ParseErr.Unimplemented;
-            },
             inline .GREAT, .GREAT_GREAT, .LESS_GREAT,
-                   .GREAT_PIPE, .LESS => |g| {
-                log("Found io redirect: |{s}|", .{RedirectOperatorSet[@intFromEnum(g)]});
+                   .GREAT_PIPE, .LESS => |r| {
+                log("Found io redirect: |{s}|", .{RedirectOperatorSet[@intFromEnum(r)]});
                 _ = self.skipWhitespace();
 
                 const file = try self.lexWord() orelse {
                     log("io_redirect failed with no/invalid filename", .{});
                     return self.fail(ParseDiagnostics.Tag.expected_filename ,self.i);
                 };
-                const t = switch(g) {
+                const t = switch(r) {
                     .GREAT => ast.Redirect.GREAT,
                     .GREAT_GREAT => ast.Redirect.GREAT_GREAT,
                     .LESS_GREAT => ast.Redirect.LESS_GREAT,
@@ -273,8 +258,23 @@ pub const Parser = struct {
                     .filename = file
                 };
             },
+            .LESS_LESS => {
+                // @TODO(Renzix): Implement heredoc
+                log("LESS_LESS << is unimplemented", .{});
+                return ParseErr.Unimplemented;
+            },
+            .LESS_LESS_DASH => {
+                // @TODO(Renzix): Implement file heredoc
+                log("LESS_LESS_DASH <<- is unimplemented", .{});
+                return ParseErr.Unimplemented;
+            },
+            .LESS_AMP => {
+                // @TODO(Renzix): Implement fds
+                log("LESS_AMP <& is unimplemented", .{});
+                return ParseErr.Unimplemented;
+            },
             .GREAT_AMP => {
-                // @TODO(Renzix): Implement
+                // @TODO(Renzix): Implement fds
                 log("GREAT_AMP >& is unimplemented", .{});
                 return ParseErr.Unimplemented;
             },
