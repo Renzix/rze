@@ -237,19 +237,6 @@ pub const Parser = struct {
         if (self.i >= self.code.len) return null;
         const redir = try self.lexRedirectOperator() orelse return null;
         switch(redir){
-            .LESS => {
-                log("Found LESSTHAN: <", .{});
-                _ = self.skipWhitespace();
-                // expected filename, io_rediect with no filename
-                const file = try self.lexWord() orelse {
-                    log("io_redirect < failed with no/invalid filename", .{});
-                    return self.fail(ParseDiagnostics.Tag.expected_filename ,self.i);
-                };
-                return .{
-                    .typ = ast.Redirect.LESS,
-                    .filename = file
-                };
-            },
             .LESS_LESS => {
                 // @TODO(Renzix): Implement
                 log("LESS_LESS << is unimplemented", .{});
@@ -265,22 +252,20 @@ pub const Parser = struct {
                 log("LESS_AMP <& is unimplemented", .{});
                 return ParseErr.Unimplemented;
             },
-            .LESS_GREAT => {
-                // @TODO(Renzix): Implement
-                log("LESS_GREAT <> is unimplemented", .{});
-                return ParseErr.Unimplemented;
-            },
-            inline .GREAT, .GREAT_GREAT => |g| {
-                log("Found GREAT: >", .{});
+            inline .GREAT, .GREAT_GREAT, .LESS_GREAT,
+                   .GREAT_PIPE, .LESS => |g| {
+                log("Found io redirect: |{s}|", .{RedirectOperatorSet[@intFromEnum(g)]});
                 _ = self.skipWhitespace();
 
                 const file = try self.lexWord() orelse {
-                    log("io_redirect > failed with no/invalid filename", .{});
+                    log("io_redirect failed with no/invalid filename", .{});
                     return self.fail(ParseDiagnostics.Tag.expected_filename ,self.i);
                 };
                 const t = switch(g) {
                     .GREAT => ast.Redirect.GREAT,
                     .GREAT_GREAT => ast.Redirect.GREAT_GREAT,
+                    .LESS_GREAT => ast.Redirect.LESS_GREAT,
+                    .GREAT_PIPE => ast.Redirect.GREAT_PIPE,
                     else => unreachable,
                 };
                 return .{
@@ -291,11 +276,6 @@ pub const Parser = struct {
             .GREAT_AMP => {
                 // @TODO(Renzix): Implement
                 log("GREAT_AMP >& is unimplemented", .{});
-                return ParseErr.Unimplemented;
-            },
-            .GREAT_PIPE => {
-                // @TODO(Renzix): Implement
-                log("GREAT_PIPE >| is unimplemented", .{});
                 return ParseErr.Unimplemented;
             },
         }

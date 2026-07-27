@@ -51,7 +51,7 @@ pub const Redirect = enum {
     GREAT,       // >
     GREAT_GREAT, // >>
     LESS_GREAT,  // <>
-    LESS_PIPE,   // >|
+    GREAT_PIPE,   // >|
 };
 
 pub const IoRedirection = struct {
