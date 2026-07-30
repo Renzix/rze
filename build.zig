@@ -23,6 +23,12 @@ pub fn build(b: *std.Build) void {
         }),
     });
 
+    exe.root_module.addCSourceFile(.{
+        .file = b.path("src/term/io.c"),
+        .flags = &.{"-std=c17"}
+    });
+    mod.addIncludePath(b.path("src/term"));
+
     exe.root_module.linkSystemLibrary("SDL3", .{});
 
     b.installArtifact(exe);
