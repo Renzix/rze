@@ -3,8 +3,9 @@
 #include <termios.h>
 #include <unistd.h>
 #include <errno.h>
-#include <stdbool.h>
 #include <string.h>
+#include <stdint.h>
+#include <assert.h>
 
 struct term{
   struct termios orig;
@@ -19,9 +20,11 @@ static const struct { const char *seq; cmd_fn fn; } keymap[] = {
   { "\x05"   ,  ln_end               },
   { "\x04"   ,  ln_delete_or_eof     },
   { "\x7f"   ,  ln_backward_delete   },
-  { "\r"     ,  ln_accept            },
-  { "\r\n"   ,  ln_accept            },
+  { "\x0d"   ,  ln_accept            },
+  { "\x0A"   ,  ln_accept            },
   { "\x0b"   ,  ln_kill              },
+  { "\eb"   ,  ln_backward_word     },
+  { "\ef"   ,  ln_forward_word      },
   /* { "\e[D",  ln_backward_char     }, */
   /* { "\e[C",  ln_forward_char      }, */
 };
@@ -48,15 +51,22 @@ int rzterm_getline(char* arr, size_t arrsize) {
   bool blk = false;
   rzterm_refresh(&l);
 
+  char temp[10] = {0};
+  uint8_t index=0;
+  input_sm sm = INPUT_INIT;
   while (l.n < l.cap - 1) {
     char ch;
     ssize_t r = read(STDIN_FILENO, &ch, 1);
-    if (r == 0) break;                       /* EOF */
+    if (r == 0) break;
     if (r < 0) { if (errno == EINTR) continue; return -1; }
 
-    char temp[10] = {0};
-    temp[0]=ch;
-    cmd_fn fn = keymap_lookup(temp, 1);
+    temp[index]=ch;
+    sm = read_more_input(sm, temp, index++);
+    if (sm != INPUT_DONE) continue;
+    sm = INPUT_INIT;
+    cmd_fn fn = keymap_lookup(temp, index);
+    index=0;
+
     cmdret_t ret = fn ? fn(&l) : ln_self_insert(&l, ch);
     switch (ret) {
       case CMD_REFRESH: {
@@ -158,4 +168,49 @@ cmdret_t ln_delete_or_eof(line_t *l) {
 cmdret_t ln_kill(line_t *l) {
   l->n=l->pos;
   return CMD_REFRESH;
+}
+
+cmdret_t ln_backward_word(line_t *l) {
+  while((l->pos > 0) && (l->buf[l->pos-1] == ' ')) l->pos--;
+  while((l->pos > 0) && (l->buf[l->pos-1] != ' ')) l->pos--;
+  return CMD_REFRESH;
+}
+
+cmdret_t ln_forward_word(line_t *l) {
+  while((l->pos < l->n-1) && (l->buf[l->pos] == ' ')) l->pos++;
+  while((l->pos < l->n-1) && (l->buf[l->pos] != ' ')) l->pos++;
+  return CMD_REFRESH;
+}
+
+input_sm read_more_input(input_sm sm, char* arr, size_t index) {
+  char ch = arr[index];
+  switch(sm) {
+    case INPUT_INIT: {
+      assert(index==0);
+      switch(ch) {
+        case '\e': { return INPUT_ESC; }
+        default: { return INPUT_DONE; }
+      }
+      break;
+    }
+    case INPUT_ESC: {
+      switch(ch) {
+        case '[': return INPUT_CSI;
+        default: return INPUT_DONE;
+      }
+      break;
+    }
+    case INPUT_CSI: {
+      if ((ch < 0x40) || (ch > 0x7E))
+        return INPUT_CSI;
+      else
+        return INPUT_DONE;
+      break;
+    }
+    case INPUT_DONE: {
+      break;
+    }
+  }
+  printf("Failed to read input");
+  assert(false);
 }
