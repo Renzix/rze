@@ -11,7 +11,7 @@ struct term{
   struct termios orig;
   struct termios raw;
 
-  char prompt[50]; // @TODO(Renzix): Make dynamic???
+  char prompt[MAX_PROMPTSIZE];
 }t;
 
 // @TODO(Renzix): Replace with actual text editor commands
@@ -30,6 +30,7 @@ static const struct { const char *seq; cmd_fn fn; } keymap[] = {
 };
 
 void rzterm_init(const char* prompt, size_t promptsize) {
+  if(promptsize>=MAX_PROMPTSIZE) _exit(1);
   tcgetattr(STDIN_FILENO, &t.orig);
   t.raw = t.orig;
   strncpy(t.prompt, prompt, promptsize);
@@ -51,7 +52,7 @@ int rzterm_getline(char* arr, size_t arrsize) {
   bool blk = false;
   rzterm_refresh(&l);
 
-  char temp[10] = {0};
+  char temp[MAX_CODE] = {0};
   uint8_t index=0;
   input_sm sm = INPUT_INIT;
   while (l.n < l.cap - 1) {
@@ -60,6 +61,7 @@ int rzterm_getline(char* arr, size_t arrsize) {
     if (r == 0) break;
     if (r < 0) { if (errno == EINTR) continue; return -1; }
 
+    if (index>=MAX_CODE) _exit(1);
     temp[index]=ch;
     sm = read_more_input(sm, temp, index++);
     if (sm != INPUT_DONE) continue;
