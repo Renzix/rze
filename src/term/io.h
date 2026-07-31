@@ -10,6 +10,8 @@ extern int rzterm_getline(char* arr, size_t arrsize);
 #define MAX_PROMPTSIZE 200
 // max size of a single escape code
 #define MAX_CODE 32
+// max buffer size after PROMPTSIZE + input buffer + other stuff
+#define MAX_OUT 20480
 
 // internal
 // Do not touch unless you know what ur doing

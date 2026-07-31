@@ -96,7 +96,7 @@ int rzterm_getline(char* arr, size_t arrsize) {
 }
 
 void rzterm_refresh(line_t *l) {
-  char out[16384]; // @TODO(Renzix): Make better
+  char out[MAX_OUT]; // @TODO(Renzix): Make better
   size_t k = 0;
   size_t plen = strlen(t.prompt);
 
