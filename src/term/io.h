@@ -9,7 +9,7 @@ extern int rzterm_getline(char* arr, size_t arrsize);
 // maximum bytes in prompt, escape codes = multiple
 #define MAX_PROMPTSIZE 200
 // max size of a single escape code
-#define MAX_CODE  20
+#define MAX_CODE 32
 
 // internal
 // Do not touch unless you know what ur doing
