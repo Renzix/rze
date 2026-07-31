@@ -32,5 +32,7 @@ cmdret_t ln_kill(line_t *l);
 
 cmdret_t ln_forward_word(line_t *l);
 cmdret_t ln_backward_word(line_t *l);
+cmdret_t ln_forward_char(line_t *l);
+cmdret_t ln_backward_char(line_t *l);
 
 #endif // __IO_H__

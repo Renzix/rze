@@ -23,10 +23,10 @@ static const struct { const char *seq; cmd_fn fn; } keymap[] = {
   { "\x0d"   ,  ln_accept            },
   { "\x0A"   ,  ln_accept            },
   { "\x0b"   ,  ln_kill              },
-  { "\eb"   ,  ln_backward_word     },
-  { "\ef"   ,  ln_forward_word      },
-  /* { "\e[D",  ln_backward_char     }, */
-  /* { "\e[C",  ln_forward_char      }, */
+  { "\eb"    ,  ln_backward_word     },
+  { "\ef"    ,  ln_forward_word      },
+  { "\e[D"   ,  ln_backward_char     },
+  { "\e[C"   ,  ln_forward_char      },
 };
 
 void rzterm_init(const char* prompt, size_t promptsize) {
@@ -217,3 +217,12 @@ cmdret_t ln_forward_word(line_t *l) {
   return CMD_REFRESH;
 }
 
+cmdret_t ln_forward_char(line_t *l) {
+  if (l->pos < l->n) l->pos++;
+  return CMD_REFRESH;
+}
+
+cmdret_t ln_backward_char(line_t *l) {
+  if (l->pos >= 0) l->pos--;
+  return CMD_REFRESH;
+}
