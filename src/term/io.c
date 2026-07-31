@@ -101,6 +101,7 @@ void rzterm_refresh(line_t *l) {
   out[k++] = '\r';
   memcpy(out + k, t.prompt, plen);
   k += plen;
+  // @TODO(Renzix): syntax highlighting
   memcpy(out + k, l->buf, l->n);
   k += l->n;
   memcpy(out + k, "\x1b[0K", 4);
@@ -124,6 +125,49 @@ cmd_fn keymap_lookup(char* seq, size_t seqlen) {
   return NULL;
 }
 
+cmdret_t ln_self_insert(line_t *l, char ch) {
+  if (l->n + 1 >= l->cap)
+    return CMD_NORM;
+  memmove(l->buf + l->pos + 1, l->buf + l->pos, l->n - l->pos);
+  l->buf[l->pos++] = ch;
+  l->n++;
+  return CMD_REFRESH;
+}
+
+input_sm read_more_input(input_sm sm, char* arr, size_t index) {
+  char ch = arr[index];
+  switch(sm) {
+    case INPUT_INIT: {
+      assert(index==0);
+      switch(ch) {
+        case '\e': { return INPUT_ESC; }
+        default: { return INPUT_DONE; }
+      }
+      break;
+    }
+    case INPUT_ESC: {
+      switch(ch) {
+        case '[': return INPUT_CSI;
+        default: return INPUT_DONE;
+      }
+      break;
+    }
+    case INPUT_CSI: {
+      if ((ch < 0x40) || (ch > 0x7E))
+        return INPUT_CSI;
+      else
+        return INPUT_DONE;
+      break;
+    }
+    case INPUT_DONE: {
+      break;
+    }
+  }
+  printf("Failed to read input");
+  assert(false);
+}
+
+// keybinded commands @TODO(Renzix): put into my language or zig?
 cmdret_t ln_backward_delete(line_t *l) {
   if (l->pos == 0)
     return CMD_NORM;
@@ -135,15 +179,6 @@ cmdret_t ln_backward_delete(line_t *l) {
 
 cmdret_t ln_accept(line_t *l) {
   return CMD_DONE;
-}
-
-cmdret_t ln_self_insert(line_t *l, char ch) {
-  if (l->n + 1 >= l->cap)
-    return CMD_NORM;
-  memmove(l->buf + l->pos + 1, l->buf + l->pos, l->n - l->pos);
-  l->buf[l->pos++] = ch;
-  l->n++;
-  return CMD_REFRESH;
 }
 
 cmdret_t ln_beginning(line_t *l) {
@@ -182,35 +217,3 @@ cmdret_t ln_forward_word(line_t *l) {
   return CMD_REFRESH;
 }
 
-input_sm read_more_input(input_sm sm, char* arr, size_t index) {
-  char ch = arr[index];
-  switch(sm) {
-    case INPUT_INIT: {
-      assert(index==0);
-      switch(ch) {
-        case '\e': { return INPUT_ESC; }
-        default: { return INPUT_DONE; }
-      }
-      break;
-    }
-    case INPUT_ESC: {
-      switch(ch) {
-        case '[': return INPUT_CSI;
-        default: return INPUT_DONE;
-      }
-      break;
-    }
-    case INPUT_CSI: {
-      if ((ch < 0x40) || (ch > 0x7E))
-        return INPUT_CSI;
-      else
-        return INPUT_DONE;
-      break;
-    }
-    case INPUT_DONE: {
-      break;
-    }
-  }
-  printf("Failed to read input");
-  assert(false);
-}
