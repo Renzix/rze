@@ -353,6 +353,24 @@ pub const rzvm = struct {
                 self.pc += 1;
                 continue :vm ins.op;
             },
+            .not => {
+                const args = ins.args.abc;
+                var a = self.peekReg(args.a);
+                if (a.nullable == false) {
+                    switch (a.type_info) {
+                        .err, .boolean => if (a.data==0) { a.data=1; } else { a.data=0; },
+                        else => a=rzval.initBoolean(false),
+                    }
+                }
+                else {
+                    a=rzval.initBoolean(true);
+                }
+                self.loadReg(a, args.a);
+
+                ins = program[self.pc];
+                self.pc += 1;
+                continue :vm ins.op;
+            },
             .setio => {
                 const args = ins.args.abc;
                 const a = self.peekReg(args.a);

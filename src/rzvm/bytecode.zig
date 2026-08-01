@@ -83,6 +83,7 @@ pub const opcode = enum(u8) {
     wait = 31,
     concat = 26, // opcode(u8) + start reg(u8) + reg count(u8) + reg of result(u8)
     resolve = 27, // opcode(u8) + reg(u8) + type(u8) + unused(u8)
+    not = 32, // opcode(u8) + reg(u8)
 
 };
 

@@ -69,6 +69,11 @@ pub const RzValue = packed struct(u64) {
         return init(TypeInfo.int, false, false, false, GcBit.white, raw);
     }
 
+    pub fn initBoolean(val: bool) RzValue {
+        const raw: u48 = if(val) 1 else 0;
+        return init(TypeInfo.boolean, false, false, false, GcBit.white, raw);
+    }
+
     // @TODO(Renzix): Switch to f64 and cut off the percision maybe?
     pub fn initFloat(val: f32) RzValue {
         const raw: u32 = @bitCast(val);
