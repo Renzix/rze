@@ -3,6 +3,7 @@ const RzValue = @import("rzvalue.zig").RzValue;
 const RzErr = @import("rzvalue.zig").RzErr;
 const str = @import("datatypes/string.zig");
 const StringHeader = @import("datatypes/string.zig").StringHeader;
+const log = @import("std").debug.print;
 
 pub const Proto = struct {
     argcount: u8,
@@ -23,6 +24,7 @@ pub const Runtime = struct {
     gi: u16,
     ci: u16,
     constants: [10000]RzValue,
+    string_constant_symbol: std.StringHashMap(u16),
     variables: [std.math.maxInt(u16)+1]RzValue,
     symbol: std.StringHashMap(u16),
     functions: [1024]Proto, // replace with closures???
@@ -37,6 +39,7 @@ pub const Runtime = struct {
             .gi = 0,
             .ci = 0,
             .constants = [_]RzValue{RzValue.initErr(RzErr.name_not_found)} ** 10000,
+            .string_constant_symbol = .init(allocator),
             .variables = [_]RzValue{RzValue.initErr(RzErr.name_not_found)} ** (std.math.maxInt(u16) + 1),
             .symbol = .init(allocator),
             .functions = undefined,
@@ -95,6 +98,15 @@ pub const Runtime = struct {
         return self.gi-1;
     }
 
+    // for compiler use ONLY. so we dont dedup strings
+    pub fn addStringConstant(self: *Runtime, value: RzValue) u16 {
+        if (self.string_constant_symbol.get(value.asString())) |ci| {
+            return ci;
+        }
+        self.string_constant_symbol.put(value.asString(), self.ci) catch @panic("oom, no space for symbol");
+        return self.addConstant(value);
+    }
+
     pub fn addConstant(self: *Runtime, value: RzValue) u16 {
         if (self.ci >= 10000) @panic("Too many constants");
         self.constants[self.ci] = value;
@@ -104,6 +116,35 @@ pub const Runtime = struct {
 
     pub fn getConstant(self: *Runtime, loc: u16) RzValue {
         return self.constants[loc];
+    }
+
+    // debug
+    pub fn printConstants(self: *Runtime) void {
+        // prints a table of constants
+        for(0..self.ci) |i| {
+            const r = self.constants[i];
+            var tempbuffer: [1000]u8 = std.mem.zeroes([1000]u8);
+            r.debugString(&tempbuffer);
+            // log("Type: {any}\n", .{r.type_info});
+            // log("Ptr: {any}\n", .{r.ptr});
+            // log("Mutable: {any}\n", .{r.mutable});
+            // log("Nullable: {any}\n", .{r.nullable});
+            // log("gc: {any}\n", .{r.gc});
+            log("{}: {s}\n", .{i, tempbuffer});
+        }
+    }
+
+    // debug
+    pub fn printConstant(self: *Runtime, loc: u16) void {
+        const r = self.constants[loc];
+        var tempbuffer: [1000]u8 = std.mem.zeroes([1000]u8);
+        r.debugString(&tempbuffer);
+        log("Type: {any}\n", .{r.type_info});
+        log("Ptr: {any}\n", .{r.ptr});
+        log("Mutable: {any}\n", .{r.mutable});
+        log("Nullable: {any}\n", .{r.nullable});
+        log("gc: {any}\n", .{r.gc});
+        log("data: {s}\n", .{tempbuffer});
     }
 
     pub fn setFunction(self: *Runtime, startpc: u16, argcount: u8, framesize: u8) u16 {

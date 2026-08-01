@@ -112,9 +112,14 @@ pub const repl = struct {
             const start = nextint(&it, 0);
             const end = nextint(&it, 12);
             self.vm.dump(start, end);
-        } else if (std.mem.eql(u8, name, "reg")) {
+        } else if (std.mem.eql(u8, name, "r")) {
             const r = nextint(&it, 0);
-            self.vm.regprint(r);
+            self.vm.regprint(@intCast(r));
+        } else if (std.mem.eql(u8, name, "constants")) {
+            self.vm.runtime.printConstants();
+        } else if (std.mem.eql(u8, name, "c")) {
+            const constant = nextint(&it, 0);
+            self.vm.runtime.printConstant(@intCast(constant));
         } else {
             print("unknown command: {s}\n", .{name});
         }

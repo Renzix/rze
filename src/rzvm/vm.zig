@@ -510,8 +510,8 @@ pub const rzvm = struct {
         log("\n", .{});
     }
 
-    pub fn regprint(self: *rzvm, reg: usize) void {
-        const r = self.peekReg(@intCast(reg));
+    pub fn regprint(self: *rzvm, reg: u16) void {
+        const r = self.peekReg(reg);
         var tempbuffer: [1000]u8 = std.mem.zeroes([1000]u8);
         r.debugString(&tempbuffer);
         log("Type: {any}\n", .{r.type_info});

@@ -154,7 +154,7 @@ pub const Compiler = struct{
                     var sX = str.CreateAllocatedStr("", self.allocator);
                     var rzv = rzval.initString(&sX.header);
                     rzv.nullable = true;
-                    const rX = self.runtime.addConstant(rzv);
+                    const rX = self.runtime.addStringConstant(rzv);
                     reg = self.newReg();
                     self.emit(inst.iABx(.loadc, reg, rX));
                 }
@@ -178,7 +178,7 @@ pub const Compiler = struct{
             switch (word) {
                 .literal => {
                     var sX = str.CreateAllocatedStr(word.literal.text, self.allocator);
-                    const rX = self.runtime.addConstant(rzval.initString(&sX.header));
+                    const rX = self.runtime.addStringConstant(rzval.initString(&sX.header));
                     const reg = self.newReg();
                     self.emit(inst.iABx(.loadc, reg, rX));
                 },
@@ -190,7 +190,7 @@ pub const Compiler = struct{
                         var sX = str.CreateAllocatedStr("", self.allocator);
                         var rzv = rzval.initString(&sX.header);
                         rzv.nullable = true;
-                        const rX = self.runtime.addConstant(rzv);
+                        const rX = self.runtime.addStringConstant(rzv);
                         self.emit(inst.iABx(.loadc, reg, rX));
                     }
                 },
