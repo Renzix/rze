@@ -64,7 +64,6 @@ pub const Compiler = struct{
             };
             lastjump = self.reserve();
         }
-
     }
 
     pub fn compilePipeline(self: *Compiler, pipeline: ast.Pipeline) void {
