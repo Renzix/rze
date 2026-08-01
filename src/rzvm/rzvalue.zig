@@ -66,61 +66,61 @@ pub const RzValue = packed struct(u64) {
 
     pub fn initInt(val: i48) RzValue {
         const raw: u48 = @bitCast(val);
-        return init(TypeInfo.int, false, false, false, GcBit.white, raw);
+        return init(.int, false, false, false, .white, raw);
     }
 
     pub fn initBoolean(val: bool) RzValue {
         const raw: u48 = if(val) 1 else 0;
-        return init(TypeInfo.boolean, false, false, false, GcBit.white, raw);
+        return init(.boolean, false, false, false, .white, raw);
     }
 
     // @TODO(Renzix): Switch to f64 and cut off the percision maybe?
     pub fn initFloat(val: f32) RzValue {
         const raw: u32 = @bitCast(val);
-        return init(TypeInfo.float, false, false, false, GcBit.white, raw);
+        return init(.float, false, false, false, .white, raw);
     }
 
     // static strings are always ptrs for now
     pub fn initString(val: *const str.StringHeader) RzValue {
         const raw: u48 = @intCast(@intFromPtr(val));
-        return init(TypeInfo.string, true, false, false, GcBit.white, raw);
+        return init(.string, true, false, false, .white, raw);
     }
 
     // static strings are always ptrs for now
     pub fn initEnv(val: *const str.StringHeader) RzValue {
         const raw: u48 = @intCast(@intFromPtr(val));
-        return init(TypeInfo.env, true, false, false, GcBit.white, raw);
+        return init(.env, true, false, false, .white, raw);
     }
 
     pub fn initErr(err: RzErr) RzValue {
         const raw: u48 = @intFromEnum(err);
-        return init(TypeInfo.err, false, false, false, GcBit.white, raw);
+        return init(.err, false, false, false, .white, raw);
     }
 
     pub fn initErrCode(val: u8) RzValue {
         const raw: u48 = @as(u48, val);
-        return init(TypeInfo.err, false, false, false, GcBit.static, raw);
+        return init(.err, false, false, false, .static, raw);
     }
 
     pub fn initFunction(index: u16) RzValue {
         const raw: u48 = index;
-        return init(TypeInfo.function, false, false, false, GcBit.static, raw);
+        return init(.function, false, false, false, .static, raw);
     }
 
     pub fn initFrame(pc: u16, fp: u16) RzValue {
         const raw = @as(u48, pc) << 16 | fp;
-        return init(TypeInfo.frame, false, false, false, GcBit.static, raw);
+        return init(.frame, false, false, false, .static, raw);
     }
 
     pub fn initFd(fd: u16) RzValue {
         // const raw = @as(u48, pc) << 16 | fp;
-        return init(TypeInfo.fd, false, false, false, GcBit.static, fd);
+        return init(.fd, false, false, false, .static, fd);
     }
 
     pub inline fn asI48(self: RzValue) i48 {
         return switch (self.type_info) {
-            TypeInfo.int => @bitCast(self.data),
-            TypeInfo.float => blk: {
+            .int => @bitCast(self.data),
+            .float => blk: {
                 // @TODO(Renzix): This is probably stupid and not working properly
                 const f: f32 = @bitCast(@as(u32, @truncate(self.data)));
                 break :blk @intFromFloat(f);
@@ -131,18 +131,18 @@ pub const RzValue = packed struct(u64) {
 
     pub inline fn asF32(self: RzValue) f32 {
         return switch (self.type_info) {
-            TypeInfo.int => blk: {
+            .int => blk: {
                 const int: i48 = @bitCast(self.data);
                 break :blk @floatFromInt(int);
             },
-            TypeInfo.float => @bitCast(@as(u32, @truncate(self.data))),
+            .float => @bitCast(@as(u32, @truncate(self.data))),
             else => @panic("Turning type into float is not defined yet"),
         };
     }
 
     pub inline fn asStringHeader(self: RzValue) *str.StringHeader {
         return switch (self.type_info) {
-            TypeInfo.string => @ptrFromInt(self.data),
+            .string => @ptrFromInt(self.data),
             else => @panic("Turning Type into string is not defined yet"),
         };
     }
@@ -150,7 +150,7 @@ pub const RzValue = packed struct(u64) {
     // for debug mainly
     pub inline fn asString(self: RzValue) []const u8 {
         return blk: switch (self.type_info) {
-            TypeInfo.string => {
+            .string => {
                 const header: *const str.StringHeader = @ptrFromInt(self.data);
                 break :blk header.slice();
             },

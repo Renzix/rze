@@ -238,7 +238,7 @@ pub const rzvm = struct {
                 const func = self.peekReg(args.a);
                 const varargs = (args.c==0xFF);
                 // @TODO(Renzix): Dont ignore args.b (this is # of return values)
-                if (func.type_info != typeinfo.function)
+                if (func.type_info != .function)
                     return VmErr.CallingUncallable;
 
                 const funcindex: usize = func.data;
