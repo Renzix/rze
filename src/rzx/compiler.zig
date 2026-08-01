@@ -50,8 +50,21 @@ pub const Compiler = struct{
     }
 
     pub fn compileAndOr(self: *Compiler, andor: ast.AndOr) void {
-        self.compilePipeline(andor.pipelines.items[0]);
-        // @TODO(Renzix): for each andor
+        const reg = self.reg;
+        var lastjump: ?usize = null;
+        var lastjumpop: bc.opcode = .invalid;
+        for (andor.pipelines.items, andor.and_or_list.items) |pipe, op| {
+            self.compilePipeline(pipe);
+            if (lastjump) |lj|
+                self.emitReplace(lj, inst.iAsBx(lastjumpop, reg, @intCast(self.bytecode.items.len - lj - 1)));
+            lastjumpop = switch (op) {
+                .and_if => .jnz,
+                .or_if  => .jz,
+                .end    => break,
+            };
+            lastjump = self.reserve();
+        }
+
     }
 
     pub fn compilePipeline(self: *Compiler, pipeline: ast.Pipeline) void {
@@ -107,8 +120,8 @@ pub const Compiler = struct{
             prevpipeout = pipeout;
         }
 
-        self.emit(inst.iABC(.wait, undefined, undefined, undefined));
         self.reg = initReg;
+        self.emit(inst.iABC(.wait, self.reg, undefined, undefined));
     }
 
     pub fn compileCommand(self: *Compiler, cmd: ast.Command) void {
@@ -190,6 +203,15 @@ pub const Compiler = struct{
 
     pub fn emit(self: *Compiler, ins: inst) void {
         self.bytecode.append(self.allocator, ins) catch @panic("oom");
+    }
+
+    pub fn emitReplace(self: *Compiler, loc: usize, ins: inst) void {
+        self.bytecode.items[loc]=ins;
+    }
+
+    pub fn reserve(self: *Compiler) usize {
+        self.bytecode.append(self.allocator, inst.iABC(.invalid, undefined, undefined, undefined)) catch @panic("oom");
+        return self.bytecode.items.len-1;
     }
 
     pub fn newReg(self: *Compiler) u8 {

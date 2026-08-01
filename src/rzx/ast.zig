@@ -6,7 +6,7 @@ pub const Program = struct {
     background: std.ArrayList(bool),
 };
 
-pub const AndOrIf = enum { and_if, or_if };
+pub const AndOrIf = enum { and_if, or_if, end };
 pub const AndOr = struct {
     pipelines: std.ArrayList(Pipeline),
     and_or_list: std.ArrayList(AndOrIf),

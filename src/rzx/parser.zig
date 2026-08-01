@@ -104,18 +104,16 @@ pub const Parser = struct {
 
             _ = self.skipWhitespace();
             const start = self.i;
-            const oper = (try self.lexControlOperator()) orelse break;
-            const a = switch (oper) {
-                .AMP_AMP => ast.AndOrIf.and_if,
-                .PIPE_PIPE => ast.AndOrIf.or_if,
-                else => {
-                    self.i = start;
-                    break;
-                },
-            };
+            const oper = (try self.lexControlOperator());
+            const a: ast.AndOrIf = if (oper) |o| switch (o) {
+                .AMP_AMP => .and_if,
+                .PIPE_PIPE => .or_if,
+                else => .end,
+            } else .end;
             try andor.and_or_list.append(self.allocator, a);
             _ = self.skipWhitespace();
             _ = self.skipNewlines();
+            if (a==ast.AndOrIf.end) { self.i = start; break; }
         }
         if (andor.pipelines.items.len>0) return andor else return null;
     }

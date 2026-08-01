@@ -27,9 +27,14 @@ const VmErr = error{
     TooManyVarArgs,
 };
 
+const Process = union(enum) {
+    running: std.process.Child,
+    exiting: u8,
+};
+
 const ExecContent = struct {
     pipe: Pipe,
-    pending: std.ArrayList(std.process.Child),
+    pending: std.ArrayList(Process),
 };
 
 const Pipe = struct {
@@ -274,14 +279,19 @@ pub const rzvm = struct {
                             argv[1+i] = header.slice();
                         }
 
-                        const child = std.process.spawn(self.io, .{
+                        // zig is stupid and i dont know how to do this better?
+                        // ig move it to another function
+                        const child: ?std.process.Child = blk: {
+                            break :blk std.process.spawn(self.io, .{
                             .argv   = argv[0..argcount+1],
                             .stdout = rzhelper.toStdIo(self.execcontent.pipe.stdout),
                             .stdin  = rzhelper.toStdIo(self.execcontent.pipe.stdin),
                             .stderr = rzhelper.toStdIo(self.execcontent.pipe.stderr),
-                        }) catch |err| std.debug.panic("spawn failed: {s}", .{@errorName(err)});
+                            }) catch { break :blk null; };
+                        };
+                        const abc: Process = if (child) |c| .{ .running = c } else .{ .exiting = 127 };
 
-                        self.execcontent.pending.append(self.allocator, child) catch @panic("oom");
+                        self.execcontent.pending.append(self.allocator, abc) catch @panic("oom");
                         const i: i48 = @intCast(self.execcontent.pending.items.len-1);
                         self.loadReg(rzval.initInt(i), args.a);
                     },
@@ -294,6 +304,7 @@ pub const rzvm = struct {
                 const args = ins.args.abc;
                 const a = self.peekReg(args.a);
                 std.debug.assert(a.type_info == .string);
+                // check if in path???
                 const r0 = self.runtime.setExecFunction(a.asStringHeader(), undefined);
                 self.loadReg(rzval.initFunction(r0), args.a);
 
@@ -389,12 +400,18 @@ pub const rzvm = struct {
                 const args = ins.args.abc;
 
                 var last_rc: u8 = 0;
-                for (self.execcontent.pending.items) |*child| {
-                    const term = child.wait(self.io) catch @panic("process panic'd");
-                    last_rc = switch (term) {
-                        .exited => |code| code,
-                        .signal => |sig| 128 + @as(u8, @intCast(@intFromEnum(sig))),
-                        else => 1 };
+                for (self.execcontent.pending.items) |*proc| {
+                    last_rc = switch (proc.*) {
+                        .exiting => |code| code,
+                        .running => |*child| blk: {
+                            const term = child.wait(self.io) catch @panic("process panic'd");
+                            break :blk switch (term) {
+                                .exited => |code| code,
+                                .signal => |sig| 128 + @as(u8, @intCast(@intFromEnum(sig))),
+                                else => 1
+                            };
+                        }
+                    };
                 }
                 self.execcontent.pending.clearRetainingCapacity();
                 self.loadReg(rzval.initErrCode(last_rc), args.a);

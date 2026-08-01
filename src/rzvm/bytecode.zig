@@ -49,7 +49,7 @@ pub const opcode = enum(u8) {
     invalid = 0,
     exit = 1, // exits the program
     loadg = 2, // opcode(u8) + reg(u8) + index(u16)
-    loadc = 3, // opcode(u8) + reg(u8) + ???
+    loadc = 3, // opcode(u8) + reg(u8) + index(u16)
     loadb = 4, // opcode(u8) + reg(u8) + value(u16) // always sets int
     storeg = 28, // opcode(u8) + reg(u8) + index(u16)
     mov  = 5, // opcode(u8) + from(u8) + to(u8)
@@ -66,9 +66,9 @@ pub const opcode = enum(u8) {
     ltne = 14, // opcode(u8) + rega(u8) + regb(u8)
     gtne = 15, // opcode(u8) + rega(u8) + regb(u8)
     // control flow
-    jmp = 16, // opcode(u8) + undefined(u8) + amount(u16)
-    jz = 17, // jump if not 0
-    jnz = 18, // jump if 0
+    jmp = 16, // opcode(u8) + undefined(u8) + relativelocation(i16)
+    jz = 17, // opcode(u8) + register(u8) + relativelocation(i16)
+    jnz = 18, // opcode(u8) + register(u8) + relativelocation(i16)
     call = 19, // opcode(u8) + reg for funtion ptr(u8) + return count(u8) + argcount(u8)
     ret = 20, // returns from function
     // var args
