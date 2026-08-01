@@ -361,8 +361,7 @@ pub const rzvm = struct {
                         .err, .boolean => if (a.data==0) { a.data=1; } else { a.data=0; },
                         else => a=rzval.initBoolean(false),
                     }
-                }
-                else {
+                } else {
                     a=rzval.initBoolean(true);
                 }
                 self.loadReg(a, args.a);
