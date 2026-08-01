@@ -37,7 +37,8 @@ pub const repl = struct {
         };
         const prompt = "rze> ";
         term.rzterm_init(prompt.ptr, prompt.len);
-        var runtime = Runtime.init(self.allocator, self.proc);
+        var runtime = Runtime.init(self.allocator);
+        runtime.setEnv(proc.environ_map);
         self.parser = p.Parser.init(self.allocator);
         self.compiler = c.Compiler.init(self.allocator, &runtime);
         self.vm = v.rzvm.init(self.allocator, self.proc.io, &runtime);

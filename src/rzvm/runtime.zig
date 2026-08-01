@@ -28,7 +28,7 @@ pub const Runtime = struct {
     functions: [1024]Proto, // replace with closures???
     allocator: std.mem.Allocator,
 
-    pub fn init(allocator: std.mem.Allocator, proc: std.process.Init) Runtime {
+    pub fn init(allocator: std.mem.Allocator) Runtime {
         var self = Runtime{
             .stdinfd = 0,
             .stdoutfd = 0,
@@ -48,14 +48,16 @@ pub const Runtime = struct {
         self.stdoutfd = @intCast(self.addConstant(RzValue.initFd(1)));
         self.stderrfd = @intCast(self.addConstant(RzValue.initFd(2)));
 
-        // environment variables
-        const map = proc.environ_map;
-        for (map.keys(), map.values()) |k, v| {
-            var r0 = str.CreateAllocatedStr(v, allocator);
-            _ = self.addGlobal(k, RzValue.initString(&r0.header));
-        }
 
         return self;
+    }
+
+    pub fn setEnv(self: *Runtime, map: *std.process.Environ.Map) void {
+        // environment variables
+        for (map.keys(), map.values()) |k, v| {
+            var r0 = str.CreateAllocatedStr(v, self.allocator);
+            _ = self.addGlobal(k, RzValue.initString(&r0.header));
+        }
     }
 
     pub fn addGlobal(self: *Runtime, name: []const u8, value: RzValue) u16 {
