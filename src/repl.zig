@@ -109,18 +109,18 @@ pub const repl = struct {
         const name = it.next() orelse return;
 
         if (std.mem.eql(u8, name, "regs")) {
-            const start = nextInt(&it, 0);
-            const end = nextInt(&it, start+1);
+            const start = nextint(&it, 0);
+            const end = nextint(&it, 12);
             self.vm.dump(start, end);
         } else if (std.mem.eql(u8, name, "reg")) {
-            const r = nextInt(&it, 0);
+            const r = nextint(&it, 0);
             self.vm.regprint(r);
         } else {
             print("unknown command: {s}\n", .{name});
         }
     }
 
-    fn nextInt(it: *std.mem.TokenIterator(u8, .any), default: usize) usize {
+    fn nextint(it: *std.mem.TokenIterator(u8, .any), default: usize) usize {
         const tok = it.next() orelse return default;
         return std.fmt.parseInt(usize, tok, 10) catch default;
     }
