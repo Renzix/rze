@@ -78,8 +78,8 @@ pub const opcode = enum(u8) {
     argexpand = 24, // expand var specifically for unquoted shell variables (pushes multiple args)
     // misc
     setio = 25, // opcode(u8) + reg of fd(u8) + stream(u8) + unused(u8)
-    mkpipe = 29,
-    pipeclose = 30,
+    mkpipe = 29, // opcode(u8) + reg of fd(u8) + reg of fd(u8) + unused(u8)
+    pipeclose = 30, // opcode(u8) + reg of fd(u8) + reg of fd(u8) + unused(u8)
     wait = 31,
     concat = 26, // opcode(u8) + start reg(u8) + reg count(u8) + reg of result(u8)
     resolve = 27, // opcode(u8) + reg(u8) + type(u8) + unused(u8)
@@ -92,23 +92,30 @@ const log = @import("std").log.debug;
 
 // helper function
 pub fn dump(bytecode: std.ArrayList(instruction)) void {
-    for (bytecode.items) |ins| {
+    for (bytecode.items, 0..) |ins, line| {
         switch (ins.op) {
-            .loadg, .loadc, .storeg => log(".{s:<10} r{} var[{}]", .{@tagName(ins.op), ins.args.abx.a, ins.args.abx.bx}),
-            .setio => log(".{s:<10} r{} {}", .{@tagName(ins.op), ins.args.abc.a, ins.args.abc.b}),
+            .loadg, .loadc, .storeg => log("{:<3} .{s:<10} r{} var[{}]", .{line, @tagName(ins.op), ins.args.abx.a, ins.args.abx.bx}),
+            .setio => log("{:<3} .{s:<10} r{} {}", .{line, @tagName(ins.op), ins.args.abc.a, ins.args.abc.b}),
+            .mkpipe, .pipeclose => log("{:<3} .{s:<10} r{} r{}", .{line, @tagName(ins.op), ins.args.abc.a, ins.args.abc.b}),
             .concat => {
-                log(".{s:<10} {}-{} res{}", .{@tagName(ins.op), ins.args.abc.a, ins.args.abc.a+ins.args.abc.b, ins.args.abc.c});
+                log("{:<3} .{s:<10} {}-{} res{}", .{line, @tagName(ins.op), ins.args.abc.a, ins.args.abc.a+ins.args.abc.b, ins.args.abc.c});
             },
             .resolve => {
                 const t: TypeInfo = @enumFromInt(ins.args.abc.b);
-                log(".{s:<10} r{} {}", .{@tagName(ins.op), ins.args.abc.a, t});
+                log("{:<3} .{s:<10} r{} {}", .{line, @tagName(ins.op), ins.args.abc.a, t});
             },
             .call => {
-                log(".{s:<10} r{} ret{} arg{}", .{@tagName(ins.op), ins.args.abc.a, ins.args.abc.b, ins.args.abc.c});
+                log("{:<3} .{s:<10} r{} ret{} arg{}", .{line, @tagName(ins.op), ins.args.abc.a, ins.args.abc.b, ins.args.abc.c});
             },
-            .exit, .wait => log(".{s:<10}", .{@tagName(ins.op)}),
-            else => log(".{s:<10} 0b{b:0>8} 0b{b:0>8} 0b{b:0>8}",
-                        .{@tagName(ins.op), ins.args.abc.a, ins.args.abc.b, ins.args.abc.c}),
+            .jz, .jnz => {
+                log("{:<3} .{s:<10} r{} ret{}", .{line, @tagName(ins.op), ins.args.asbx.a, ins.args.asbx.sbx});
+            },
+            .not => {
+                log("{:<3} .{s:<10} r{}", .{line, @tagName(ins.op), ins.args.abc.a});
+            },
+            .exit, .wait => log("{:<3} .{s:<10}", .{line, @tagName(ins.op)}),
+            else => log("{:<3} .{s:<10} 0b{b:0>8} 0b{b:0>8} 0b{b:0>8}",
+                        .{line, @tagName(ins.op), ins.args.abc.a, ins.args.abc.b, ins.args.abc.c}),
 
         }
     }
