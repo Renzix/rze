@@ -94,24 +94,14 @@ const log = @import("std").log.debug;
 pub fn dump(bytecode: std.ArrayList(instruction)) void {
     for (bytecode.items, 0..) |ins, line| {
         switch (ins.op) {
-            .loadg, .loadc, .storeg => log("{:<3} .{s:<10} r{} var[{}]", .{line, @tagName(ins.op), ins.args.abx.a, ins.args.abx.bx}),
-            .setio => log("{:<3} .{s:<10} r{} {}", .{line, @tagName(ins.op), ins.args.abc.a, ins.args.abc.b}),
-            .mkpipe, .pipeclose => log("{:<3} .{s:<10} r{} r{}", .{line, @tagName(ins.op), ins.args.abc.a, ins.args.abc.b}),
-            .concat => {
-                log("{:<3} .{s:<10} {}-{} res{}", .{line, @tagName(ins.op), ins.args.abc.a, ins.args.abc.a+ins.args.abc.b, ins.args.abc.c});
-            },
-            .resolve => {
-                const t: TypeInfo = @enumFromInt(ins.args.abc.b);
-                log("{:<3} .{s:<10} r{} {}", .{line, @tagName(ins.op), ins.args.abc.a, t});
-            },
-            .call => {
-                log("{:<3} .{s:<10} r{} ret{} arg{}", .{line, @tagName(ins.op), ins.args.abc.a, ins.args.abc.b, ins.args.abc.c});
-            },
+            .loadg, .loadc, .storeg => log("{:<3} .{s:<10} {} {}", .{line, @tagName(ins.op), ins.args.abx.a, ins.args.abx.bx}),
+            .mkpipe, .pipeclose, .setio, .resolve => log("{:<3} .{s:<10} {} {}", .{line, @tagName(ins.op), ins.args.abc.a, ins.args.abc.b}),
+            .concat, .call => log("{:<3} .{s:<10} {} {} {}", .{line, @tagName(ins.op), ins.args.abc.a, ins.args.abc.b, ins.args.abc.c}),
             .jz, .jnz => {
-                log("{:<3} .{s:<10} r{} ret{}", .{line, @tagName(ins.op), ins.args.asbx.a, ins.args.asbx.sbx});
+                log("{:<3} .{s:<10} {} {}", .{line, @tagName(ins.op), ins.args.asbx.a, ins.args.asbx.sbx});
             },
             .not => {
-                log("{:<3} .{s:<10} r{}", .{line, @tagName(ins.op), ins.args.abc.a});
+                log("{:<3} .{s:<10} {}", .{line, @tagName(ins.op), ins.args.abc.a});
             },
             .exit, .wait => log("{:<3} .{s:<10}", .{line, @tagName(ins.op)}),
             else => log("{:<3} .{s:<10} 0b{b:0>8} 0b{b:0>8} 0b{b:0>8}",
@@ -124,8 +114,8 @@ pub fn dump(bytecode: std.ArrayList(instruction)) void {
 
 const Runtime = @import("runtime.zig").Runtime;
 pub fn prettydump(bytecode: std.ArrayList(instruction), rt: *Runtime) void {
-    var tempbuffer: [1000]u8 = std.mem.zeroes([1000]u8);
     for (bytecode.items, 0..) |ins, line| {
+        var tempbuffer: [1000]u8 = std.mem.zeroes([1000]u8);
         switch (ins.op) {
             .loadc => {
                 const val = rt.getConstant(ins.args.abx.bx);

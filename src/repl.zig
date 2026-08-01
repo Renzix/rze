@@ -60,6 +60,10 @@ pub const repl = struct {
     pub fn eval(self: *repl) void {
         if (self.code_len == 0) return;
         const prog = self.code[0..self.code_len];
+        if (prog.len > 0 and prog[0] == ':') {
+            self.replcommand(prog[1..]);
+            return;
+        }
 
         const ast = self.parser.run(prog) catch |err| {
             // @TODO(Renzix): Move all this terminal stuff to a seperate file and probably write a
@@ -98,5 +102,26 @@ pub const repl = struct {
             self.vm.dump(0, 12);
             @panic("AAAAAHHHH");
         };
+    }
+
+    fn replcommand(self: *repl, line: []const u8) void {
+        var it = std.mem.tokenizeAny(u8, line, " \t\r\n");
+        const name = it.next() orelse return;
+
+        if (std.mem.eql(u8, name, "regs")) {
+            const start = nextInt(&it, 0);
+            const end = nextInt(&it, start+1);
+            self.vm.dump(start, end);
+        } else if (std.mem.eql(u8, name, "reg")) {
+            const r = nextInt(&it, 0);
+            self.vm.regprint(r);
+        } else {
+            print("unknown command: {s}\n", .{name});
+        }
+    }
+
+    fn nextInt(it: *std.mem.TokenIterator(u8, .any), default: usize) usize {
+        const tok = it.next() orelse return default;
+        return std.fmt.parseInt(usize, tok, 10) catch default;
     }
 };

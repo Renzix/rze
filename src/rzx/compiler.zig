@@ -121,7 +121,8 @@ pub const Compiler = struct{
 
         self.reg = initReg;
         self.emit(inst.iABC(.wait, self.reg, undefined, undefined));
-        self.emit(inst.iABC(.not, self.reg, undefined, undefined));
+        if (pipeline.bang)
+            self.emit(inst.iABC(.not, self.reg, undefined, undefined));
     }
 
     pub fn compileCommand(self: *Compiler, cmd: ast.Command) void {

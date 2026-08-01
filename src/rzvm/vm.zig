@@ -501,12 +501,25 @@ pub const rzvm = struct {
 
         for (self.registers[start..end], start..end) |reg, i| {
             log("r{:0>3}: 0x{x:0>016}    ", .{ i, reg });
+            // fix this...
             if ((i + 1) % 4 == 0) {
                 log("\n", .{});
             }
         }
 
-        log("=======================\n\n", .{});
+        log("\n", .{});
+    }
+
+    pub fn regprint(self: *rzvm, reg: usize) void {
+        const r = self.peekReg(@intCast(reg));
+        var tempbuffer: [1000]u8 = std.mem.zeroes([1000]u8);
+        r.debugString(&tempbuffer);
+        log("Type: {any}\n", .{r.type_info});
+        log("Ptr: {any}\n", .{r.ptr});
+        log("Mutable: {any}\n", .{r.mutable});
+        log("Nullable: {any}\n", .{r.nullable});
+        log("gc: {any}\n", .{r.gc});
+        log("data: {s}\n", .{tempbuffer});
     }
 };
 

@@ -167,7 +167,7 @@ pub const RzValue = packed struct(u64) {
                 @memcpy(buffer[1..n+1], s[0..n]);
                 buffer[n+2] = '"';
             },
-            .fd => {
+            .fd, .int, .err => {
                 _ = std.fmt.bufPrint(buffer, "{d}", .{self.data}) catch unreachable;
             },
             else => {},
