@@ -147,14 +147,31 @@ pub const RzValue = packed struct(u64) {
         };
     }
 
+    // for debug mainly
     pub inline fn asString(self: RzValue) []const u8 {
         return blk: switch (self.type_info) {
             TypeInfo.string => {
                 const header: *const str.StringHeader = @ptrFromInt(self.data);
                 break :blk header.slice();
             },
-            else => @panic("Turning Type into string is not defined yet"),
+            else => std.debug.panic("Turning Type {} into string is not defined yet", .{self.type_info}),
         };
+    }
+
+    pub inline fn debugString(self: RzValue, buffer: []u8) void {
+        switch (self.type_info) {
+            .string => {
+                const s = self.asStringHeader().slice();
+                const n = @min(s.len, buffer.len);
+                buffer[0] = '"';
+                @memcpy(buffer[1..n+1], s[0..n]);
+                buffer[n+2] = '"';
+            },
+            .fd => {
+                _ = std.fmt.bufPrint(buffer, "{d}", .{self.data}) catch unreachable;
+            },
+            else => {},
+        }
     }
 
     pub inline fn setf32(self: *RzValue, val: f32) void {

@@ -120,3 +120,36 @@ pub fn dump(bytecode: std.ArrayList(instruction)) void {
         }
     }
 }
+
+
+const Runtime = @import("runtime.zig").Runtime;
+pub fn prettydump(bytecode: std.ArrayList(instruction), rt: *Runtime) void {
+    var tempbuffer: [1000]u8 = std.mem.zeroes([1000]u8);
+    for (bytecode.items, 0..) |ins, line| {
+        switch (ins.op) {
+            .loadc => {
+                const val = rt.getConstant(ins.args.abx.bx);
+                val.debugString(&tempbuffer);
+                log("{:<3} {s:<10} r{any} {s}", .{line, @tagName(ins.op), ins.args.abx.a, tempbuffer});
+            },
+            .setio => log("{:<3} {s:<10} r{} :stream {}", .{line, @tagName(ins.op), ins.args.abc.a, ins.args.abc.b}),
+            .resolve => {
+                const t: TypeInfo = @enumFromInt(ins.args.abc.b);
+                log("{:<3} {s:<10} r{} :type {}", .{line, @tagName(ins.op), ins.args.abc.a, t});
+            },
+            .call => {
+                log("{:<3} {s:<10} r{} :return {} :arguments {}", .{line, @tagName(ins.op), ins.args.abc.a, ins.args.abc.b, ins.args.abc.c});
+            },
+            .not => {
+                log("{:<3} {s:<10} r{}", .{line, @tagName(ins.op), ins.args.abc.a});
+            },
+            .mkpipe, .pipeclose => {
+                log("{:<3} {s:<10} r{} r{}", .{line, @tagName(ins.op), ins.args.abc.a, ins.args.abc.b});
+            },
+            .exit, .wait => log("{:<3} {s:<10}", .{line, @tagName(ins.op)}),
+            else => log("{:<3} {s:<10} 0b{b:0>8} 0b{b:0>8} 0b{b:0>8}",
+                        .{line, @tagName(ins.op), ins.args.abc.a, ins.args.abc.b, ins.args.abc.c}),
+
+        }
+    }
+}

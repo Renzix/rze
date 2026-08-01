@@ -45,7 +45,7 @@ pub const Compiler = struct{
         }
         log("{}", .{self.bytecode});
         self.emit(inst.exit());
-        bc.dump(self.bytecode);
+        bc.prettydump(self.bytecode, self.runtime);
         return self.bytecode;
     }
 
