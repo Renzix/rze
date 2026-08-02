@@ -38,10 +38,8 @@ pub const Compiler = struct{
     pub fn run(self: *Compiler, prog: ast.Program) std.ArrayList(inst) {
         self.reset();
         self.prog = prog;
-        // Compile the AST to bytecode
         for (prog.andors.items, prog.background.items) |andor, background| {
-            // log("line {}, contents: {any}, background: {}", .{index, andor,background});
-            self.compileAndOr(andor, background); // @TODO(Renzix): Handle background
+            self.compileAndOr(andor, background);
         }
         log("{}", .{self.bytecode});
         self.emit(inst.exit());

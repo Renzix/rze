@@ -95,9 +95,15 @@ const log = @import("std").log.debug;
 pub fn dump(bytecode: std.ArrayList(instruction)) void {
     for (bytecode.items, 0..) |ins, line| {
         switch (ins.op) {
-            .loadg, .loadc, .storeg => log("{:<3} .{s:<10} {} {}", .{line, @tagName(ins.op), ins.args.abx.a, ins.args.abx.bx}),
-            .mkpipe, .pipeclose, .setio, .resolve => log("{:<3} .{s:<10} {} {}", .{line, @tagName(ins.op), ins.args.abc.a, ins.args.abc.b}),
-            .concat, .call => log("{:<3} .{s:<10} {} {} {}", .{line, @tagName(ins.op), ins.args.abc.a, ins.args.abc.b, ins.args.abc.c}),
+            .loadg, .loadc, .storeg => log("{:<3} .{s:<10} {} {}",
+                                           .{line, @tagName(ins.op), ins.args.abx.a, ins.args.abx.bx}),
+            .mkpipe, .pipeclose, .setio, .resolve => {
+                log("{:<3} .{s:<10} {} {}", .{line, @tagName(ins.op), ins.args.abc.a, ins.args.abc.b});
+            },
+            .concat, .call => {
+                log("{:<3} .{s:<10} {} {} {}",
+                    .{line, @tagName(ins.op), ins.args.abc.a, ins.args.abc.b, ins.args.abc.c});
+            },
             .jz, .jnz => {
                 log("{:<3} .{s:<10} {} {}", .{line, @tagName(ins.op), ins.args.asbx.a, ins.args.asbx.sbx});
             },
@@ -134,13 +140,18 @@ pub fn prettydump(bytecode: std.ArrayList(instruction), rt: *Runtime) void {
                 log("{:<3} {s:<10} r{} :type {}", .{line, @tagName(ins.op), ins.args.abc.a, t});
             },
             .call => {
-                log("{:<3} {s:<10} r{} :return {} :arguments {}", .{line, @tagName(ins.op), ins.args.abc.a, ins.args.abc.b, ins.args.abc.c});
+                log("{:<3} {s:<10} r{} :return {} :arguments {}",
+                    .{line, @tagName(ins.op), ins.args.abc.a, ins.args.abc.b, ins.args.abc.c});
             },
             .not => {
                 log("{:<3} {s:<10} r{}", .{line, @tagName(ins.op), ins.args.abc.a});
             },
             .mkpipe, .pipeclose => {
                 log("{:<3} {s:<10} r{} r{}", .{line, @tagName(ins.op), ins.args.abc.a, ins.args.abc.b});
+            },
+            .jz, .jnz => {
+                log("{:<3} {s:<10} r{} {:<40}; absolute position of jump ",
+                    .{line, @tagName(ins.op), ins.args.asbx.a, 1+ins.args.asbx.sbx+@as(i16, @intCast(line))});
             },
             .exit, .fg => log("{:<3} {s:<10}", .{line, @tagName(ins.op)}),
             else => log("{:<3} {s:<10} 0b{b:0>8} 0b{b:0>8} 0b{b:0>8}",
