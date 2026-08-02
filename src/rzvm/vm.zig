@@ -47,6 +47,7 @@ pub const rzvm = struct {
     io: std.Io,
     top: u16,
     allocator: std.mem.Allocator,
+    halt: ?u8,
 
     pub fn init(alloc: std.mem.Allocator, io: std.Io, rt: *Runtime) rzvm {
         const regs = alloc.alloc(u64, 256) catch @panic("oom");
@@ -61,6 +62,7 @@ pub const rzvm = struct {
             .io = io,
             .top = 0,
             .allocator = alloc,
+            .halt = null,
         };
     }
     pub fn deinit(self: *rzvm) void {
@@ -302,6 +304,8 @@ pub const rzvm = struct {
                         // @TODO(Renzix): argv[0] is an error, fix this by editing getVarArgs
                         const cmd = argv[0..argc+1];
                         const err = proto.impl.native(self, cmd);
+
+                        // some specific to native function stuff
                         self.loadReg(rzval.initErrCode(err), args.a);
                     },
                 }

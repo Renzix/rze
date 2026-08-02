@@ -3,7 +3,7 @@ const std = @import("std");
 const rze = @import("rze");
 // const repl = @import("repl.zig");
 
-pub fn main(init: std.process.Init) !void {
+pub fn main(init: std.process.Init) !u8 {
     // // const arena: std.mem.Allocator = init.arena.allocator();
 
     // // const args = try init.minimal.args.toSlice(arena);
@@ -14,5 +14,5 @@ pub fn main(init: std.process.Init) !void {
     // // defer display.deinit();
     // // display.run();
     var myrepl = rze.repl.init(init);
-    myrepl.run();
+    return myrepl.run();
 }

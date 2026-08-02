@@ -44,11 +44,12 @@ pub const repl = struct {
         self.vm = v.rzvm.init(self.allocator, self.proc.io, &runtime);
         return self;
     }
-    pub fn run(self: *repl) void {
-        while (true) {
+    pub fn run(self: *repl) u8 {
+        while (self.vm.halt==null) {
             self.read() catch break; // @TODO(Renzix): Make better
             self.eval();
         }
+        return self.vm.halt orelse 0;
     }
 
     pub fn read(self: *repl) !void {

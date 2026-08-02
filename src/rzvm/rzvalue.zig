@@ -135,6 +135,13 @@ pub const RzValue = packed struct(u64) {
         };
     }
 
+    pub inline fn asU8(self: RzValue) u8 {
+        return switch (self.type_info) {
+            .int, .err, .job => @truncate(self.data),
+            else => @panic("Turning type into int is not defined yet"),
+        };
+    }
+
     pub inline fn asF32(self: RzValue) f32 {
         return switch (self.type_info) {
             .int => blk: {
