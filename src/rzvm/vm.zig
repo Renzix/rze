@@ -420,10 +420,14 @@ pub const rzvm = struct {
             .bg => {
                 const args = ins.args.abc;
 
+                // @TODO(Renzix): Handle windows somehow idk how it works
                 _ = self.runtime.addJob(self.pending);
                 const pid = self.pending.items[self.pending.items.len-1].running.id;
                 self.loadReg(rzval.initInt(pid.?), args.a);
                 self.pending = .empty;
+
+                // print out nice [1] 127893 for user?
+                // log("[{}] {}", .{id, pid.?});
 
                 ins = program[self.pc];
                 self.pc += 1;
