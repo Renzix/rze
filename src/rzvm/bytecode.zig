@@ -123,6 +123,11 @@ pub fn prettydump(bytecode: std.ArrayList(instruction), rt: *Runtime) void {
                 val.debugString(&tempbuffer);
                 log("{:<3} {s:<10} r{any} {s}", .{line, @tagName(ins.op), ins.args.abx.a, tempbuffer});
             },
+            .loadg => {
+                const val = rt.getGlobalIndex(ins.args.abx.bx);
+                val.debugString(&tempbuffer);
+                log("{:<3} {s:<10} r{any} {s}", .{line, @tagName(ins.op), ins.args.abx.a, tempbuffer});
+            },
             .setio => log("{:<3} {s:<10} r{} :stream {}", .{line, @tagName(ins.op), ins.args.abc.a, ins.args.abc.b}),
             .resolve => {
                 const t: TypeInfo = @enumFromInt(ins.args.abc.b);

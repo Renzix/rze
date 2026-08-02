@@ -120,12 +120,15 @@ pub const Compiler = struct{
         }
 
         self.reg = initReg;
-        if (background)
-            self.emit(inst.iABC(.bg, self.reg, undefined, undefined))
-        else
+        if (background) {
+            self.emit(inst.iABC(.bg, self.reg, undefined, undefined));
+            const pid = self.runtime.reserveGlobal("!");
+            self.emit(inst.iABx(.storeg, self.reg, pid));
+        } else {
             self.emit(inst.iABC(.fg, self.reg, undefined, undefined));
-        if (pipeline.bang)
-            self.emit(inst.iABC(.not, self.reg, undefined, undefined));
+            if (pipeline.bang)
+                self.emit(inst.iABC(.not, self.reg, undefined, undefined));
+        }
     }
 
     pub fn compileCommand(self: *Compiler, cmd: ast.Command) void {

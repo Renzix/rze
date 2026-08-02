@@ -9,6 +9,7 @@ const opcode = @import("bytecode.zig").opcode;
 const inst = @import("bytecode.zig").instruction;
 const RzErr = @import("rzvalue.zig").RzErr;
 
+const Process = @import("runtime.zig").Process;
 const Runtime = @import("runtime.zig").Runtime;
 
 const str = @import("datatypes/string.zig");
@@ -25,11 +26,6 @@ const VmErr = error{
     IncorrectReturnValueCount,
     InvalidStream,
     TooManyVarArgs,
-};
-
-const Process = union(enum) {
-    running: std.process.Child,
-    exited: u8,
 };
 
 const Pipe = struct {
@@ -263,25 +259,35 @@ pub const rzvm = struct {
                         // so we dont have to inline this code???
                         if (args.b!=0x01)
                             return VmErr.IncorrectReturnValueCount;
-                        var argv: [256][]const u8 = undefined;
+
+                        var argv: [256][]const u8 = undefined; // main buffer for all arguments
+                        const buflen = comptime std.fmt.count("{d}", .{std.math.minInt(i48)});
+                        var buf: [buflen]u8 = undefined; // buffer to convert some stuff to string
+
                         argv[0] = proto.impl.exec.slice();
                         const base: u16 = self.fp + args.a;
-                        const argcount: u16 = if (!varargs) args.c else (self.top - (base + 1));
-                        if (argcount + 1 > argv.len) return VmErr.TooManyVarArgs;
-                        for (0..argcount) |i| {
+                        const argc: u16 = if (!varargs) args.c else (self.top - (base + 1));
+                        if (argc + 1 > argv.len) return VmErr.TooManyVarArgs;
+                        for (0..argc) |i| {
                             const param = self.peekReg(args.a + 1 + @as(u8, @intCast(i)));
-                            if (param.type_info != .string) {
-                                return VmErr.ExpectedString;
+                            switch (param.type_info) {
+                                .string => {
+                                    const header: *const str.StringHeader = @ptrFromInt(param.data);
+                                    argv[1+i] = header.slice();
+                                },
+                                .int => {
+                                    const n = std.fmt.printInt(&buf, param.asI48(), 10, .lower, .{});
+                                    argv[1+i] = buf[0..n];
+                                },
+                                else => std.debug.panic("Tried to use type {} as arg", .{param.type_info})
                             }
-                            const header: *const str.StringHeader = @ptrFromInt(param.data);
-                            argv[1+i] = header.slice();
                         }
 
                         // zig is stupid and i dont know how to do this better?
                         // ig move it to another function
                         const child: ?std.process.Child = blk: {
                             break :blk std.process.spawn(self.io, .{
-                            .argv   = argv[0..argcount+1],
+                            .argv   = argv[0..argc+1],
                             .stdout = rzhelper.toStdIo(self.pipe.stdout),
                             .stdin  = rzhelper.toStdIo(self.pipe.stdin),
                             .stderr = rzhelper.toStdIo(self.pipe.stderr),
@@ -412,7 +418,12 @@ pub const rzvm = struct {
                 continue :vm ins.op;
             },
             .bg => {
-                // const args = ins.args.abc;
+                const args = ins.args.abc;
+
+                _ = self.runtime.addJob(self.pending);
+                const pid = self.pending.items[self.pending.items.len-1].running.id;
+                self.loadReg(rzval.initInt(pid.?), args.a);
+                self.pending = .empty;
 
                 ins = program[self.pc];
                 self.pc += 1;
@@ -424,7 +435,7 @@ pub const rzvm = struct {
                 var last_rc: u8 = 0;
                 for (self.pending.items) |*proc| {
                     last_rc = switch (proc.*) {
-                        .exited => |code| code,
+                        .exited => |code| if (code) |c| c else 127,
                         .running => |*child| blk: {
                             const term = child.wait(self.io) catch @panic("process panic'd");
                             break :blk switch (term) {

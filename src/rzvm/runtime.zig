@@ -16,6 +16,18 @@ pub const Proto = struct {
         exec: *StringHeader, // @TODO(Renzix): Remove now that string is callable??
     },
 };
+
+pub const Process = union(enum) {
+    running: std.process.Child,
+    exited: ?u8,
+};
+
+pub const Job = struct {
+    id: u16,
+    job: std.ArrayList(Process),
+};
+
+// move arrays to std.Arraylist or some manual datastructure???
 pub const Runtime = struct {
     stdinfd: u8,
     stdoutfd: u8,
@@ -27,6 +39,7 @@ pub const Runtime = struct {
     string_constant_symbol: std.StringHashMap(u16),
     variables: [std.math.maxInt(u16)+1]RzValue,
     symbol: std.StringHashMap(u16),
+    jobs: std.ArrayList(Job),
     functions: [1024]Proto, // replace with closures???
     allocator: std.mem.Allocator,
 
@@ -43,6 +56,7 @@ pub const Runtime = struct {
             .variables = [_]RzValue{RzValue.initErr(RzErr.name_not_found)} ** (std.math.maxInt(u16) + 1),
             .symbol = .init(allocator),
             .functions = undefined,
+            .jobs = .empty,
             .allocator = allocator,
         };
 
@@ -51,6 +65,8 @@ pub const Runtime = struct {
         self.stdoutfd = @intCast(self.addConstant(RzValue.initFd(1)));
         self.stderrfd = @intCast(self.addConstant(RzValue.initFd(2)));
 
+        _ = self.reserveGlobal("!");
+        _ = self.reserveGlobal("?");
 
         return self;
     }
@@ -78,6 +94,10 @@ pub const Runtime = struct {
             return self.variables[loc];
         }
         return null;
+    }
+
+    pub fn getGlobalIndex(self: *Runtime, loc: u16) RzValue {
+        return self.variables[loc];
     }
 
     pub fn findGlobal(self: *Runtime, name: []const u8) ?u16 {
@@ -155,6 +175,7 @@ pub const Runtime = struct {
         self.fi += 1;
         return self.fi-1;
     }
+
     pub fn setExecFunction(self: *Runtime, bin: *StringHeader, argcount: u8) u16 {
         self.functions[self.fi] = .{
             .impl = .{ .exec = bin },
@@ -162,5 +183,40 @@ pub const Runtime = struct {
         };
         self.fi += 1;
         return self.fi-1;
+    }
+
+    pub fn addJob(self: *Runtime, procs: std.ArrayList(Process)) u16 {
+        const j: Job = .{ .id = @intCast(self.jobs.items.len), .job = procs };
+        self.jobs.append(self.allocator, j) catch @panic("oom");
+        return j.id;
+    }
+
+    pub fn waitForJob(self: *Runtime, io: std.io, id: u16) void {
+        var last_rc: u8 = 0;
+        for (self.jobs[id].job.items) |*proc| {
+            last_rc = switch (proc.*) {
+                .exited => |code| if (code) |c| c else 127,
+                .running => |*child| blk: {
+                    const term = child.wait(io) catch @panic("process panic'd");
+                    break :blk switch (term) {
+                        .exited => |code| code,
+                        .signal => |sig| 128 + @as(u8, @intCast(@intFromEnum(sig))),
+                        else => 1
+                    };
+                }
+            };
+        }
+        return last_rc;
+    }
+
+    pub fn waitForAllJobs(self: *Runtime, io: std.io) void {
+        for (self.jobs.items) |js| {
+            for (js.job.items) |*proc| {
+                switch (proc.*) {
+                    .exited => {},
+                    .running => |*child| child.wait(io) catch @panic("process panic'd"),
+                }
+            }
+        }
     }
 };

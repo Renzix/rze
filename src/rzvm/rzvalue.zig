@@ -17,6 +17,7 @@ pub const TypeInfo = enum(u8) {
     boolean = 0b1100,
     env = 0b1101,
     frame = 0b1110,
+    job = 0b1111,
 };
 
 pub const GcBit = enum(u2) {
@@ -102,6 +103,11 @@ pub const RzValue = packed struct(u64) {
         return init(.err, false, false, false, .static, raw);
     }
 
+    pub fn initJob(job: u16) RzValue {
+        const raw: u48 = @as(u48, job);
+        return init(.job, false, false, false, .white, raw);
+    }
+
     pub fn initFunction(index: u16) RzValue {
         const raw: u48 = index;
         return init(.function, false, false, false, .static, raw);
@@ -170,7 +176,7 @@ pub const RzValue = packed struct(u64) {
             .int => {
                 _ = std.fmt.bufPrint(buffer, "{d}", .{self.data}) catch unreachable;
             },
-            .fd,  .err => {
+            .fd, .err, .job => {
                 _ = std.fmt.bufPrint(buffer, "{}<{d}>", .{self.type_info,self.data}) catch unreachable;
             },
             else => {},
