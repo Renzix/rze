@@ -354,7 +354,6 @@ pub const Parser = struct {
                         try w.append(self.allocator, lit);
                         log("Found Double Quote: \"{s}\"", .{lit.literal.text});
                     }
-                    // @TODO(Renzix): if "$ " then ignore
                     const d = try self.lexDollar(w, Quoted.DOUBLE);
                     if (!d) return false;
                     start = self.i;

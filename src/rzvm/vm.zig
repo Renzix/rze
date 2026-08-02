@@ -275,7 +275,7 @@ pub const rzvm = struct {
                                     const header: *const str.StringHeader = @ptrFromInt(param.data);
                                     argv[1+i] = header.slice();
                                 },
-                                .int => {
+                                .int, .err, .job => {
                                     const n = std.fmt.printInt(&buf, param.asI48(), 10, .lower, .{});
                                     argv[1+i] = buf[0..n];
                                 },
@@ -423,7 +423,7 @@ pub const rzvm = struct {
                 // @TODO(Renzix): Handle windows somehow idk how it works
                 _ = self.runtime.addJob(self.pending);
                 const pid = self.pending.items[self.pending.items.len-1].running.id;
-                self.loadReg(rzval.initInt(pid.?), args.a);
+                self.loadReg(rzval.initJob(@as(u16, @intCast(pid.?))), args.a);
                 self.pending = .empty;
 
                 // print out nice [1] 127893 for user?

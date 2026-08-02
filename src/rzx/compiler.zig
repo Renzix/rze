@@ -124,6 +124,8 @@ pub const Compiler = struct{
             self.emit(inst.iABx(.storeg, self.reg, pid));
         } else {
             self.emit(inst.iABC(.fg, self.reg, undefined, undefined));
+            const ret = self.runtime.reserveGlobal("?");
+            self.emit(inst.iABx(.storeg, self.reg, ret));
             if (pipeline.bang)
                 self.emit(inst.iABC(.not, self.reg, undefined, undefined));
         }

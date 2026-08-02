@@ -125,7 +125,7 @@ pub const RzValue = packed struct(u64) {
 
     pub inline fn asI48(self: RzValue) i48 {
         return switch (self.type_info) {
-            .int => @bitCast(self.data),
+            .int, .err, .job => @bitCast(self.data),
             .float => blk: {
                 // @TODO(Renzix): This is probably stupid and not working properly
                 const f: f32 = @bitCast(@as(u32, @truncate(self.data)));
