@@ -29,12 +29,7 @@ const VmErr = error{
 
 const Process = union(enum) {
     running: std.process.Child,
-    exiting: u8,
-};
-
-const ExecContent = struct {
-    pipe: Pipe,
-    pending: std.ArrayList(Process),
+    exited: u8,
 };
 
 const Pipe = struct {
@@ -49,7 +44,8 @@ const Pipe = struct {
 pub const rzvm = struct {
     registers: []u64,
     runtime: *Runtime,
-    execcontent: ExecContent,
+    pending: std.ArrayList(Process),
+    pipe: Pipe,
     pc: u16,
     fp: u16,
     io: std.Io,
@@ -62,7 +58,8 @@ pub const rzvm = struct {
         return rzvm{
             .registers = regs,
             .runtime = rt,
-            .execcontent = .{ .pending = .empty, .pipe = .{} },
+            .pending = .empty,
+            .pipe = .{},
             .pc = 0,
             .fp = 0,
             .io = io,
@@ -79,7 +76,8 @@ pub const rzvm = struct {
         self.pc = 0;
         self.fp = 0;
         self.top = 0;
-        self.execcontent = .{ .pending = .empty, .pipe = .{} };
+        self.pending = .empty;
+        self.pipe = .{};
     }
     pub fn run(self: *rzvm, program: []const inst) VmErr!void {
         self.reset();
@@ -284,15 +282,15 @@ pub const rzvm = struct {
                         const child: ?std.process.Child = blk: {
                             break :blk std.process.spawn(self.io, .{
                             .argv   = argv[0..argcount+1],
-                            .stdout = rzhelper.toStdIo(self.execcontent.pipe.stdout),
-                            .stdin  = rzhelper.toStdIo(self.execcontent.pipe.stdin),
-                            .stderr = rzhelper.toStdIo(self.execcontent.pipe.stderr),
+                            .stdout = rzhelper.toStdIo(self.pipe.stdout),
+                            .stdin  = rzhelper.toStdIo(self.pipe.stdin),
+                            .stderr = rzhelper.toStdIo(self.pipe.stderr),
                             }) catch { break :blk null; };
                         };
-                        const abc: Process = if (child) |c| .{ .running = c } else .{ .exiting = 127 };
+                        const abc: Process = if (child) |c| .{ .running = c } else .{ .exited = 127 };
 
-                        self.execcontent.pending.append(self.allocator, abc) catch @panic("oom");
-                        const i: i48 = @intCast(self.execcontent.pending.items.len-1);
+                        self.pending.append(self.allocator, abc) catch @panic("oom");
+                        const i: i48 = @intCast(self.pending.items.len-1);
                         self.loadReg(rzval.initInt(i), args.a);
                     },
                 }
@@ -374,9 +372,9 @@ pub const rzvm = struct {
                 const args = ins.args.abc;
                 const a = self.peekReg(args.a);
                 switch (args.b) {
-                    0x00 => self.execcontent.pipe.stdin = a,
-                    0x01 => self.execcontent.pipe.stdout = a,
-                    0x02 => self.execcontent.pipe.stderr = a,
+                    0x00 => self.pipe.stdin = a,
+                    0x01 => self.pipe.stdout = a,
+                    0x02 => self.pipe.stderr = a,
                     else => return VmErr.InvalidStream,
                 }
 
@@ -413,13 +411,20 @@ pub const rzvm = struct {
                 self.pc += 1;
                 continue :vm ins.op;
             },
-            .wait => {
+            .bg => {
+                // const args = ins.args.abc;
+
+                ins = program[self.pc];
+                self.pc += 1;
+                continue :vm ins.op;
+            },
+            .fg => {
                 const args = ins.args.abc;
 
                 var last_rc: u8 = 0;
-                for (self.execcontent.pending.items) |*proc| {
+                for (self.pending.items) |*proc| {
                     last_rc = switch (proc.*) {
-                        .exiting => |code| code,
+                        .exited => |code| code,
                         .running => |*child| blk: {
                             const term = child.wait(self.io) catch @panic("process panic'd");
                             break :blk switch (term) {
@@ -430,7 +435,7 @@ pub const rzvm = struct {
                         }
                     };
                 }
-                self.execcontent.pending.clearRetainingCapacity();
+                self.pending.clearRetainingCapacity();
                 self.loadReg(rzval.initErrCode(last_rc), args.a);
 
                 ins = program[self.pc];
@@ -769,7 +774,7 @@ test "call, ret (executable)" {
         inst.iABx(.loadc, 0x01, vr1),
         inst.iABx(.loadc, 0x02, vr2),
         inst.iABC(.call, 0x00, 0x01, 0x02),
-        inst.iABC(.wait, 0x00, undefined, undefined),
+        inst.iABC(.fg, 0x00, undefined, undefined),
         inst.exit(),
     };
     try vm.run(&bytecode);

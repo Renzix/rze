@@ -80,7 +80,8 @@ pub const opcode = enum(u8) {
     setio = 25, // opcode(u8) + reg of fd(u8) + stream(u8) + unused(u8)
     mkpipe = 29, // opcode(u8) + reg of fd(u8) + reg of fd(u8) + unused(u8)
     pipeclose = 30, // opcode(u8) + reg of fd(u8) + reg of fd(u8) + unused(u8)
-    wait = 31,
+    fg = 31,
+    bg = 33,
     concat = 26, // opcode(u8) + start reg(u8) + reg count(u8) + reg of result(u8)
     resolve = 27, // opcode(u8) + reg(u8) + type(u8) + unused(u8)
     not = 32, // opcode(u8) + reg(u8)
@@ -103,7 +104,7 @@ pub fn dump(bytecode: std.ArrayList(instruction)) void {
             .not => {
                 log("{:<3} .{s:<10} {}", .{line, @tagName(ins.op), ins.args.abc.a});
             },
-            .exit, .wait => log("{:<3} .{s:<10}", .{line, @tagName(ins.op)}),
+            .exit, .fg => log("{:<3} .{s:<10}", .{line, @tagName(ins.op)}),
             else => log("{:<3} .{s:<10} 0b{b:0>8} 0b{b:0>8} 0b{b:0>8}",
                         .{line, @tagName(ins.op), ins.args.abc.a, ins.args.abc.b, ins.args.abc.c}),
 
@@ -136,7 +137,7 @@ pub fn prettydump(bytecode: std.ArrayList(instruction), rt: *Runtime) void {
             .mkpipe, .pipeclose => {
                 log("{:<3} {s:<10} r{} r{}", .{line, @tagName(ins.op), ins.args.abc.a, ins.args.abc.b});
             },
-            .exit, .wait => log("{:<3} {s:<10}", .{line, @tagName(ins.op)}),
+            .exit, .fg => log("{:<3} {s:<10}", .{line, @tagName(ins.op)}),
             else => log("{:<3} {s:<10} 0b{b:0>8} 0b{b:0>8} 0b{b:0>8}",
                         .{line, @tagName(ins.op), ins.args.abc.a, ins.args.abc.b, ins.args.abc.c}),
 

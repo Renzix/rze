@@ -39,9 +39,9 @@ pub const Compiler = struct{
         self.reset();
         self.prog = prog;
         // Compile the AST to bytecode
-        for (prog.andors.items, prog.background.items) |andor, _| {
+        for (prog.andors.items, prog.background.items) |andor, background| {
             // log("line {}, contents: {any}, background: {}", .{index, andor,background});
-            self.compileAndOr(andor); // @TODO(Renzix): Handle background
+            self.compileAndOr(andor, background); // @TODO(Renzix): Handle background
         }
         log("{}", .{self.bytecode});
         self.emit(inst.exit());
@@ -49,12 +49,12 @@ pub const Compiler = struct{
         return self.bytecode;
     }
 
-    pub fn compileAndOr(self: *Compiler, andor: ast.AndOr) void {
+    pub fn compileAndOr(self: *Compiler, andor: ast.AndOr, background: bool) void {
         const reg = self.reg;
         var lastjump: ?usize = null;
         var lastjumpop: bc.opcode = .invalid;
         for (andor.pipelines.items, andor.and_or_list.items) |pipe, op| {
-            self.compilePipeline(pipe);
+            self.compilePipeline(pipe, background);
             if (lastjump) |lj|
                 self.emitReplace(lj, inst.iAsBx(lastjumpop, reg, @intCast(self.bytecode.items.len - lj - 1)));
             lastjumpop = switch (op) {
@@ -66,7 +66,7 @@ pub const Compiler = struct{
         }
     }
 
-    pub fn compilePipeline(self: *Compiler, pipeline: ast.Pipeline) void {
+    pub fn compilePipeline(self: *Compiler, pipeline: ast.Pipeline, background: bool) void {
         // This is so i can have infinite pipes =) (not that the OS will let me)
         var pipein: u8 = undefined;
         var pipeout: u8 = undefined;
@@ -120,7 +120,10 @@ pub const Compiler = struct{
         }
 
         self.reg = initReg;
-        self.emit(inst.iABC(.wait, self.reg, undefined, undefined));
+        if (background)
+            self.emit(inst.iABC(.bg, self.reg, undefined, undefined))
+        else
+            self.emit(inst.iABC(.fg, self.reg, undefined, undefined));
         if (pipeline.bang)
             self.emit(inst.iABC(.not, self.reg, undefined, undefined));
     }
