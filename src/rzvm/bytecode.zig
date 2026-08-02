@@ -39,8 +39,8 @@ pub const instruction = packed struct(u32) {
     pub fn resolve(reg: u8, typ: TypeInfo) instruction {
         return .{ .op = .resolve, .args = .{ .abc = .{ .a = reg, .b = @intFromEnum(typ), .c = undefined } } };
     }
-    pub fn exit() instruction {
-        return .{ .op = .exit, .args = .{ .abc = .{ .a = undefined, .b = undefined, .c = undefined } } };
+    pub fn exit(reg: u8) instruction {
+        return .{ .op = .exit, .args = .{ .abc = .{ .a = reg, .b = undefined, .c = undefined } } };
     }
 };
 

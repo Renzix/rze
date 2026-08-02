@@ -230,7 +230,6 @@ pub const rzvm = struct {
             .call => {
                 const args = ins.args.abc;
                 const func = self.peekReg(args.a);
-                const varargs = (args.c==0xFF);
                 // @TODO(Renzix): Dont ignore args.b (this is # of return values)
                 if (func.type_info != .function)
                     return VmErr.CallingUncallable;
@@ -252,6 +251,7 @@ pub const rzvm = struct {
                         self.fp = newfp;
                         self.pc = proto.impl.bytecode.startpc;
                     },
+                    // @TODO(Renzix): Make better i hate this alot
                     .exec => {
                         // Starting processes is slow so assume we never go here
                         @branchHint(.cold);
@@ -262,26 +262,13 @@ pub const rzvm = struct {
 
                         var argv: [256][]const u8 = undefined; // main buffer for all arguments
                         const buflen = comptime std.fmt.count("{d}", .{std.math.minInt(i48)});
-                        var buf: [buflen]u8 = undefined; // buffer to convert some stuff to string
-
+                        var buf: [buflen*256]u8 = undefined; // 256 of max possible number lengths
                         argv[0] = proto.impl.exec.slice();
+
+                        const varargs = (args.c==0xFF);
                         const base: u16 = self.fp + args.a;
                         const argc: u16 = if (!varargs) args.c else (self.top - (base + 1));
-                        if (argc + 1 > argv.len) return VmErr.TooManyVarArgs;
-                        for (0..argc) |i| {
-                            const param = self.peekReg(args.a + 1 + @as(u8, @intCast(i)));
-                            switch (param.type_info) {
-                                .string => {
-                                    const header: *const str.StringHeader = @ptrFromInt(param.data);
-                                    argv[1+i] = header.slice();
-                                },
-                                .int, .err, .job => {
-                                    const n = std.fmt.printInt(&buf, param.asI48(), 10, .lower, .{});
-                                    argv[1+i] = buf[0..n];
-                                },
-                                else => std.debug.panic("Tried to use type {} as arg", .{param.type_info})
-                            }
-                        }
+                        try self.getVarArgs(args.a, argc, &argv, &buf);
 
                         // zig is stupid and i dont know how to do this better?
                         // ig move it to another function
@@ -299,6 +286,24 @@ pub const rzvm = struct {
                         const i: i48 = @intCast(self.pending.items.len-1);
                         self.loadReg(rzval.initInt(i), args.a);
                     },
+                    .native => {
+                        if (args.b!=0x01)
+                            return VmErr.IncorrectReturnValueCount;
+
+                        var argv: [256][]const u8 = undefined; // main buffer for all arguments
+                        const buflen = comptime std.fmt.count("{d}", .{std.math.minInt(i48)});
+                        var buf: [buflen*256]u8 = undefined; // 256 of max possible number lengths
+
+                        const varargs = (args.c==0xFF);
+                        const base: u16 = self.fp + args.a;
+                        const argc: u16 = if (!varargs) args.c else (self.top - (base + 1));
+                        try self.getVarArgs(args.a, argc, &argv, &buf);
+
+                        // @TODO(Renzix): argv[0] is an error, fix this by editing getVarArgs
+                        const cmd = argv[0..argc+1];
+                        const err = proto.impl.native(self, cmd);
+                        self.loadReg(rzval.initErrCode(err), args.a);
+                    },
                 }
                 ins = program[self.pc];
                 self.pc += 1;
@@ -309,7 +314,10 @@ pub const rzvm = struct {
                 const a = self.peekReg(args.a);
                 std.debug.assert(a.type_info == .string);
                 // check if in path???
-                const r0 = self.runtime.setExecFunction(a.asStringHeader(), undefined);
+                // if builtin then
+                const r0 = self.runtime.findBuiltin(a.asString()) orelse
+                    self.runtime.setExecFunction(a.asStringHeader(), undefined);
+
                 self.loadReg(rzval.initFunction(r0), args.a);
 
                 ins = program[self.pc];
@@ -501,6 +509,27 @@ pub const rzvm = struct {
 
     pub fn peekReg(self: *rzvm, loc: u16) rzval {
         return @bitCast(self.registers[self.fp + loc]);
+    }
+
+    pub fn getVarArgs(self: *rzvm, arga: u16, argc: u16, argv: *[256][]const u8, buf: []u8) !void {
+        // this is ugly rn i just ignore the [0] bc the other function
+        // @TODO(Renzix): Cleanup this
+        // argv[0] = proto.impl.exec.slice();
+        if (argc + 1 > argv.len) return VmErr.TooManyVarArgs;
+        for (0..argc) |i| {
+            const param = self.peekReg(arga + 1 + @as(u8, @intCast(i)));
+            switch (param.type_info) {
+                .string => {
+                    const header: *const str.StringHeader = @ptrFromInt(param.data);
+                    argv[1+i] = header.slice();
+                },
+                .int, .err, .job => {
+                    const n = std.fmt.printInt(buf, param.asI48(), 10, .lower, .{});
+                    argv[1+i] = buf[0..n];
+                },
+                else => std.debug.panic("Tried to use type {} as arg", .{param.type_info})
+            }
+        }
     }
 
     pub inline fn growStack(self: *rzvm, newsize: u16) !void {

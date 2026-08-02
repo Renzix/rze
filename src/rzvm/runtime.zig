@@ -4,6 +4,7 @@ const RzErr = @import("rzvalue.zig").RzErr;
 const str = @import("datatypes/string.zig");
 const StringHeader = @import("datatypes/string.zig").StringHeader;
 const log = @import("std").debug.print;
+const builtins = @import("builtins/builtins.zig");
 
 pub const Proto = struct {
     argcount: u8,
@@ -12,8 +13,8 @@ pub const Proto = struct {
             startpc: u16,
             framesize: u8,
         },
-        // native: *const NativeFn,
-        exec: *StringHeader, // @TODO(Renzix): Remove now that string is callable??
+        native: *const builtins.NativeFn,
+        exec: *StringHeader,
     },
 };
 
@@ -65,8 +66,8 @@ pub const Runtime = struct {
         self.stdoutfd = @intCast(self.addConstant(RzValue.initFd(1)));
         self.stderrfd = @intCast(self.addConstant(RzValue.initFd(2)));
 
-        _ = self.reserveGlobal("!");
-        _ = self.reserveGlobal("?");
+        _ = self.addGlobal("!", RzValue.initErrCode(0));
+        _ = self.addGlobal("?", RzValue.initErrCode(0));
 
         return self;
     }
@@ -165,6 +166,18 @@ pub const Runtime = struct {
         log("Nullable: {any}\n", .{r.nullable});
         log("gc: {any}\n", .{r.gc});
         log("data: {s}\n", .{tempbuffer});
+    }
+
+    pub fn findBuiltin(self: *Runtime, name: []const u8) ?u16 {
+        if (builtins.table.get(name)) |func| {
+            self.functions[self.fi] = .{
+                .impl = .{ .native =  func },
+                .argcount = undefined,
+            };
+            self.fi += 1;
+            return self.fi-1;
+        }
+        return null;
     }
 
     pub fn setFunction(self: *Runtime, startpc: u16, argcount: u8, framesize: u8) u16 {

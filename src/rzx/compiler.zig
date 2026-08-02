@@ -42,7 +42,7 @@ pub const Compiler = struct{
             self.compileAndOr(andor, background);
         }
         log("{}", .{self.bytecode});
-        self.emit(inst.exit());
+        self.emit(inst.exit(self.reg));
         bc.prettydump(self.bytecode, self.runtime);
         return self.bytecode;
     }
