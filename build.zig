@@ -23,6 +23,7 @@ pub fn build(b: *std.Build) void {
         }),
     });
 
+    exe.use_llvm = true;
     exe.root_module.addCSourceFile(.{
         .file = b.path("src/term/io.c"),
         .flags = &.{"-std=c17"}
