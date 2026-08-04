@@ -134,7 +134,7 @@ pub const Compiler = struct{
     pub fn compileCommand(self: *Compiler, cmd: ast.Command) void {
         switch (cmd) {
             .simple_command => |sc| self.compileSimpleCommand(sc),
-            .complex_command => @panic("Complex Command not currently supported"),
+            .compound_command => @panic("Complex Command not currently supported"),
             .function_definition => @panic("Function definition not currently supported"),
         }
     }

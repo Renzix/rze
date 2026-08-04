@@ -17,10 +17,10 @@ pub const Pipeline = struct {
     cmds: std.ArrayList(Command),
 };
 
-pub const CommandTypes = enum { simple_command, complex_command, function_definition };
+pub const CommandTypes = enum { simple_command, compound_command, function_definition };
 pub const Command = union(CommandTypes) {
     simple_command: SimpleCommand,
-    complex_command: ComplexCommand,
+    compound_command: CompoundCommand,
     function_definition: FunctionDefinition,
 };
 
@@ -31,9 +31,49 @@ pub const SimpleCommand = struct {
     redirects: std.ArrayList(IoRedirection),
 };
 
-pub const ComplexCommand = struct {
-    //@TODO(Renzix): Implement
+pub const CompoundCommandTypes = enum {
+    brace_group, subshell, for_clause, case_clause,
+    if_clause, while_clause, until_clause,
 };
+pub const CompoundCommand = union(CompoundCommandTypes) {
+    brace_group: BraceGroup,
+    subshell: Subshell,
+    for_clause: ForClause,
+    case_clause: CaseClause,
+    if_clause: IfClause,
+    while_clause: WhileClause,
+    until_clause: UntilClause,
+};
+
+pub const CompoundList = struct {
+    and_or_list: std.ArrayList(AndOrIf),
+};
+
+pub const BraceGroup = struct {
+    group: CompoundList,
+};
+pub const Subshell = struct {
+    // @TODO(Renzix): Implement
+};
+pub const ForClause = struct {
+    // @TODO(Renzix): Implement
+};
+pub const CaseClause = struct {
+    // @TODO(Renzix): Implement
+};
+pub const IfClause = struct {
+    check: CompoundList,
+    body: CompoundList,
+};
+pub const WhileClause = struct {
+    check: CompoundList,
+    body: CompoundList,
+};
+pub const UntilClause = struct {
+    check: CompoundList,
+    body: CompoundList,
+};
+
 pub const FunctionDefinition = struct {
     //@TODO(Renzix): Implement
 };

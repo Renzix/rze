@@ -71,7 +71,6 @@ pub const Parser = struct {
         return program;
     }
 
-    // complete command and list
     fn parseCompleteCommandList(self: *Parser) !?ast.Program {
         var program: ast.Program = .{ .andors = .empty, .background = .empty };
         while (true) {
@@ -122,7 +121,7 @@ pub const Parser = struct {
     fn parsePipeline(self: *Parser) !?ast.Pipeline {
         var pipeline: ast.Pipeline = .{ .bang = false, .cmds = .empty };
         _ = self.skipWhitespace();
-        if (self.lexKeyword(Keyword.BANG)) {
+        if (self.lexComptimeKeyword(Keyword.BANG)) {
             pipeline.bang = true;
             _ = self.skipWhitespace();
         }
@@ -148,13 +147,16 @@ pub const Parser = struct {
     fn parseCommand(self: *Parser) !?ast.Command {
         // function command
         // compound command and optional redirect
-        if (try self.parseSimpleCommand()) |sc| {
-            return .{ .simple_command = sc };
+        if (try self.parseCompoundCommand()) |cmd| {
+            return .{ .compound_command = cmd };
+        } else if (try self.parseSimpleCommand()) |cmd| {
+            return .{ .simple_command = cmd };
         } else {
             // return ParseErr.Unimplemented;
             return null;
         }
     }
+
     fn parseSimpleCommand(self: *Parser) !?ast.SimpleCommand {
         var sc: ast.SimpleCommand = .{
             .assignments = .empty,
@@ -173,6 +175,59 @@ pub const Parser = struct {
         }
         _ = try self.parseCmdSuffix(&sc);
         if (found) return sc else return null;
+    }
+
+    fn parseCompoundCommand(self: *Parser) !?ast.CompoundCommand {
+        // subshell
+        // if(self.lexChar('(')) {
+        //     self.parseCompoundList();
+        //     self.lexChar(')');
+        // }
+        const w = try self.lexKeyword() orelse return null;
+        return blk: switch (w) {
+            Keyword.IF => {
+                const check = try self.parseCompoundList() orelse @panic("couldnt parse thing");
+                if (!self.lexComptimeKeyword(Keyword.THEN)) @panic("Expected then");
+                const body = try self.parseCompoundList() orelse @panic("couldnt parse thing");
+                if (!self.lexComptimeKeyword(Keyword.IF)) @panic("expected FI");
+                const ifcl: ast.IfClause = .{ .check = check, .body = body };
+                break :blk .{ .if_clause = ifcl };
+            },
+            Keyword.FOR => {
+                break :blk null;
+            },
+            Keyword.CASE => {
+                break :blk null;
+            },
+            Keyword.WHILE => {
+                const check = try self.parseCompoundList() orelse @panic("couldnt parse thing");
+                if (!self.lexComptimeKeyword(Keyword.DO)) @panic("Expected do");
+                const body = try self.parseCompoundList() orelse @panic("couldnt parse thing");
+                if (!self.lexComptimeKeyword(Keyword.DONE)) @panic("Expected Done");
+                const wlcl: ast.WhileClause = .{ .check = check, .body = body };
+                break :blk .{ .while_clause = wlcl };
+            },
+            Keyword.UNTIL => {
+                const check = try self.parseCompoundList() orelse @panic("couldnt parse thing");
+                if (!self.lexComptimeKeyword(Keyword.DO)) @panic("Expected do");
+                const body = try self.parseCompoundList() orelse @panic("couldnt parse thing");
+                if (!self.lexComptimeKeyword(Keyword.DONE)) @panic("Expected done");
+                const utcl: ast.UntilClause = .{ .check = check, .body = body };
+                break :blk .{ .until_clause = utcl };
+            },
+            Keyword.LBRACE => {
+                const body = try self.parseCompoundList() orelse @panic("couldnt parse thing");
+                if (!self.lexComptimeKeyword(Keyword.RBRACE)) @panic("Expected }");
+                break :blk .{ .brace_group = .{ .group = body }};
+            },
+            else => null, // check if (
+        };
+    }
+
+    fn parseCompoundList(_: *Parser) !?ast.CompoundList {
+        // andor which means its basically pipes and executable word stuff
+        // @TODO(Renzix): Implement for compound command support
+        return null;
     }
 
     fn parseCmdPrefix(self: *Parser, sc: *ast.SimpleCommand) !bool {
@@ -616,7 +671,11 @@ pub const Parser = struct {
         return true;
     }
 
-    fn lexKeyword(self: *Parser, comptime kw: Keyword) bool {
+    fn lexKeyword(_: *Parser) !?Keyword {
+        return null;
+    }
+
+    fn lexComptimeKeyword(self: *Parser, comptime kw: Keyword) bool {
         const start = self.i;
         for (KeywordSet[@intFromEnum(kw)]) |char| {
             if(self.i >= self.code.len or self.code[self.i]!=char) {

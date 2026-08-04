@@ -18,19 +18,19 @@ pub const Quoted = enum {
 };
 
 pub const Keyword = enum {
-    BANG,
-    LBRACE, RBRACE,
-    CASE, ESAC,
-    IN,
+    BANG, LBRACE, RBRACE,
+    CASE, ESAC, IN,
     IF, ELIF, FI,
+    THEN, ELSE, DO,
+    DONE, UNTIL, FOR, WHILE,
 };
 
 pub const KeywordSet: []const []const u8 = &.{
-    "!",
-    "{", "}",
-    "case", "esac",
-    "in",
+    "!", "{", "}",
+    "case", "esac", "in",
     "if", "elif", "fi",
+    "then", "else", "do",
+    "done", "until", "for", "while"
 };
 
 pub const ControlOperator = enum {
