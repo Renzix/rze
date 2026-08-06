@@ -134,9 +134,38 @@ pub const Compiler = struct{
     pub fn compileCommand(self: *Compiler, cmd: ast.Command) void {
         switch (cmd) {
             .simple_command => |sc| self.compileSimpleCommand(sc),
-            .compound_command => @panic("Complex Command not currently supported"),
+            .compound_command => |cc| self.compileCompoundCommand(cc),
             .function_definition => @panic("Function definition not currently supported"),
         }
+    }
+
+    pub fn compileCompoundCommand(self: *Compiler, cc: ast.CompoundCommand) void {
+        switch (cc) {
+            .if_clause => |if_| {
+                // run check block
+                self.compileCompoundList(if_.check);
+                // reserve the if jmp for later
+                const ifjmp = self.reserve();
+                const ifreg = self.reg;
+                self.reg += 1;
+                // create the body bytecode
+                self.compileCompoundList(if_.body);
+                // replace the if jmp with the proper values
+                self.emitReplace(ifjmp, inst.iAsBx(.jnz, ifreg, @intCast(self.bytecode.items.len - ifjmp - 1)));
+                self.reg -= 1;
+            },
+            .brace_group => @panic("brace group not supported"),
+            .while_clause => @panic("while clause not supported"),
+            .until_clause => @panic("until clause not supported"),
+            else => @panic("else panic! :)"),
+        }
+    }
+
+    pub fn compileCompoundList(self: *Compiler, cl: ast.CompoundList) void {
+        for (cl.andors.items) |andor| {
+            self.compileAndOr(andor, false); // @TODO(Renzix): background
+        }
+
     }
 
     pub fn compileSimpleCommand(self: *Compiler, sc: ast.SimpleCommand) void {

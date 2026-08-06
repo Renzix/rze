@@ -40,6 +40,7 @@ const ParseDiagnostics = struct {
         expected_command,
         unexpected_token,
         unclosed_quote,
+        invalid_compound_list,
     };
 };
 
@@ -189,7 +190,7 @@ pub const Parser = struct {
                 const check = try self.parseCompoundList() orelse @panic("couldnt parse thing");
                 if (!self.lexComptimeKeyword(Keyword.THEN)) @panic("Expected then");
                 const body = try self.parseCompoundList() orelse @panic("couldnt parse thing");
-                if (!self.lexComptimeKeyword(Keyword.IF)) @panic("expected FI");
+                if (!self.lexComptimeKeyword(Keyword.FI)) @panic("expected FI");
                 const ifcl: ast.IfClause = .{ .check = check, .body = body };
                 break :blk .{ .if_clause = ifcl };
             },
@@ -224,10 +225,28 @@ pub const Parser = struct {
         };
     }
 
-    fn parseCompoundList(_: *Parser) !?ast.CompoundList {
+    fn parseCompoundList(self: *Parser) ParseErr!?ast.CompoundList {
         // andor which means its basically pipes and executable word stuff
         // @TODO(Renzix): Implement for compound command support
-        return null;
+        var cl: ast.CompoundList = .{ .andors = .empty };
+        _ = self.skipWhitespace();
+        while (true) {
+            const andor = try self.parseAndOr() orelse break;
+            try cl.andors.append(self.allocator, andor);
+            _ = self.skipWhitespace(); // this should also skip newline but it doesnt
+            switch (self.code[self.i]) {
+                ';', '\n', '&' =>  {
+                    self.i += 1;
+                    break;
+                },
+                else => return self.fail(ParseDiagnostics.Tag.invalid_compound_list, self.i),
+            }
+        }
+        // parse andor
+        // if seperator repeat
+        _ = self.skipWhitespace(); // newline too???
+
+        return cl;
     }
 
     fn parseCmdPrefix(self: *Parser, sc: *ast.SimpleCommand) !bool {
@@ -671,8 +690,114 @@ pub const Parser = struct {
         return true;
     }
 
-    fn lexKeyword(_: *Parser) !?Keyword {
-        return null;
+    fn lexKeyword(self: *Parser) !?Keyword {
+        const start = self.i;
+        if (self.i < self.code.len) {
+            switch(self.code[self.i]) {
+                '!' => {
+                    self.i += 1;
+                    return Keyword.BANG;
+                },
+                '{' => {
+                    self.i += 1;
+                    return Keyword.LBRACE;
+                },
+                '}' => {
+                    self.i += 1;
+                    return Keyword.RBRACE;
+                },
+                'c' => { // case
+                    self.i += 1;
+                    if (self.lexString("ase")) {
+                        return Keyword.CASE;
+                    } else {
+                        self.i = start;
+                        return null;
+                    }
+                },
+                'e' => { // esac, elif, else
+                    return null;
+                },
+                'i' => { // in, if
+                    self.i += 1;
+                    if (self.i < self.code.len) {
+                        if (self.code[self.i] == 'f') {
+                            self.i += 1;
+                            return Keyword.IF;
+                        } else if (self.code[self.i] == 'n') {
+                            self.i += 1;
+                            return Keyword.IN;
+                        }
+                    }
+                    else {
+                        self.i = start;
+                        return null;
+                    }
+                },
+                'f' => { // fi, for
+                    self.i += 1;
+                    if (self.lexChar('i')) {
+                        return Keyword.FI;
+                    } else if (self.lexString("or")) {
+                        return Keyword.FOR;
+                    } else {
+                        self.i = start;
+                        return null;
+                    }
+                },
+                't' => { // then
+                    self.i += 1;
+                    if (self.lexString("hen")) {
+                        return Keyword.THEN;
+                    } else {
+                        self.i = start;
+                        return null;
+                    }
+                },
+                'd' => { // do, done
+                    self.i += 1;
+                    if (self.lexChar('o')) {
+                        if (self.lexChar('n')) {
+                            if (self.lexChar('e')) {
+                                return Keyword.DONE;
+                            } else {
+                                self.i = start;
+                                return null;
+                            }
+                        } else {
+                            return Keyword.DO;
+                        }
+                    } else {
+                        self.i = start;
+                        return null;
+                    }
+                },
+                'u' => { // until
+                    self.i += 1;
+                    if (self.lexString("ntil")) {
+                        return Keyword.UNTIL;
+                    } else {
+                        self.i = start;
+                        return null;
+                    }
+                },
+                'w' => { // while
+                    self.i += 1;
+                    if (self.lexString("hile")) {
+                        return Keyword.WHILE;
+                    } else {
+                        self.i = start;
+                        return null;
+                    }
+                },
+                else => {
+                    return null;
+                },
+            }
+        } else {
+            return null;
+        }
+        unreachable;
     }
 
     fn lexComptimeKeyword(self: *Parser, comptime kw: Keyword) bool {
@@ -847,7 +972,7 @@ pub const Parser = struct {
         return true;
     }
 
-    fn lexChar(self: *Parser, comptime char: u8) bool {
+    inline fn lexChar(self: *Parser, comptime char: u8) bool {
         if(self.i < self.code.len and self.code[self.i]==char) {
             log("Found Char: {c}", .{self.code[self.i]});
             self.i+=1;

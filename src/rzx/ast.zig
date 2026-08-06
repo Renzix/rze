@@ -46,7 +46,7 @@ pub const CompoundCommand = union(CompoundCommandTypes) {
 };
 
 pub const CompoundList = struct {
-    and_or_list: std.ArrayList(AndOrIf),
+    andors: std.ArrayList(AndOr),
 };
 
 pub const BraceGroup = struct {
