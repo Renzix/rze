@@ -146,21 +146,25 @@ pub const Compiler = struct{
                 // if and check[1..] are elif's, else is single a nullable compound list. At the top
                 // of each if/elif we run the check then jmp if the check failed. We also add a jmp
                 // to the end of the if/elif/else statement at the end of every body so we dont
-                // fallthrough to the next elif
+                // fallthrough to the next elif. One last optimization is that if we dont have a else
+                // on the last pass dont add a jump.
+                // @TODO(Renzix): if true; then false; fi; echo $? should print 1 but it prints 0
                 var bodyends: std.ArrayList(usize) = .empty;
-                for (if_.checks.items, if_.bodies.items) |check, body| {
+                for (if_.checks.items, if_.bodies.items, 0..) |check, body, i| {
                     // run check block
                     self.compileCompoundList(check);
                     // reserve the if jmp for later
-                    const ifjmp = self.reserve();
-                    const ifreg = self.reg;
+                    const skip_last_jmp = !((i == if_.checks.items.len - 1) and (if_.else_ == null));
+                    const next_if_jmp = self.reserve();
+                    const next_if_reg = self.reg;
                     // emit the body bytecode
                     self.compileCompoundList(body);
                     // after body always jump to the end
-                    bodyends.append(self.allocator, self.reserve()) catch @panic("oom");
+                    if (skip_last_jmp)
+                        bodyends.append(self.allocator, self.reserve()) catch @panic("oom");
                     // replace the if jmp with the proper values
-                    self.emitReplace(ifjmp, inst.iAsBx(.jnz, ifreg,
-                                                       @intCast(self.bytecode.items.len - ifjmp - 1)));
+                    self.emitReplace(next_if_jmp, inst.iAsBx(.jnz, next_if_reg,
+                                                       @intCast(self.bytecode.items.len - next_if_jmp - 1)));
                 }
                 // deal with optional else branch
                 if (if_.else_) |els| {
@@ -171,7 +175,6 @@ pub const Compiler = struct{
                     self.emitReplace(end, inst.iAsBx(.jmp, undefined,
                                                      @intCast(self.bytecode.items.len - end - 1)));
                 }
-
             },
             .brace_group => @panic("brace group not supported"),
             .while_clause => @panic("while clause not supported"),
