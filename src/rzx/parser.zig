@@ -187,11 +187,33 @@ pub const Parser = struct {
         const w = try self.lexKeyword() orelse return null;
         return blk: switch (w) {
             Keyword.IF => {
+                var checks: std.ArrayList(ast.CompoundList) = .empty;
                 const check = try self.parseCompoundList() orelse @panic("couldnt parse thing");
+                try checks.append(self.allocator, check);
                 if (!self.lexComptimeKeyword(Keyword.THEN)) @panic("Expected then");
+                var bodies: std.ArrayList(ast.CompoundList) = .empty;
                 const body = try self.parseCompoundList() orelse @panic("couldnt parse thing");
-                if (!self.lexComptimeKeyword(Keyword.FI)) @panic("expected FI");
-                const ifcl: ast.IfClause = .{ .check = check, .body = body };
+                try bodies.append(self.allocator, body);
+                var else_: ?ast.CompoundList = null;
+                while (true) {
+                    const kw = try self.lexKeyword() orelse @panic("keyword");
+                    switch (kw) {
+                        Keyword.ELIF => {
+                            const check2 = try self.parseCompoundList() orelse @panic("couldnt parse thing");
+                            try checks.append(self.allocator, check2);
+                            if (!self.lexComptimeKeyword(Keyword.THEN)) @panic("Expected then");
+                            const body2 = try self.parseCompoundList() orelse @panic("couldnt parse thing");
+                            try bodies.append(self.allocator, body2);
+                        },
+                        Keyword.ELSE => {
+                            else_ = try self.parseCompoundList() orelse @panic("couldnt parse thing");
+                        },
+                        Keyword.FI => break,
+                        else => @panic("random keyword!"),
+                    }
+                }
+                const ifcl: ast.IfClause = .{ .checks = checks, .bodies = bodies, .else_ = else_ };
+                std.debug.assert(checks.items.len == bodies.items.len);
                 break :blk .{ .if_clause = ifcl };
             },
             Keyword.FOR => {
@@ -716,20 +738,26 @@ pub const Parser = struct {
                     }
                 },
                 'e' => { // esac, elif, else
+                    self.i += 1;
+                    if (self.lexChar('l')) {
+                        if (self.lexString("if")) {
+                            return Keyword.ELIF;
+                        } else if (self.lexString("se")) {
+                            return Keyword.ELSE;
+                        }
+                    } else if (self.lexString("sac")) {
+                        return Keyword.ESAC;
+                    }
+                    self.i = start;
                     return null;
                 },
                 'i' => { // in, if
                     self.i += 1;
-                    if (self.i < self.code.len) {
-                        if (self.code[self.i] == 'f') {
-                            self.i += 1;
-                            return Keyword.IF;
-                        } else if (self.code[self.i] == 'n') {
-                            self.i += 1;
-                            return Keyword.IN;
-                        }
-                    }
-                    else {
+                    if (self.lexChar('f')) {
+                        return Keyword.IF;
+                    } else if (self.lexChar('n')) {
+                        return Keyword.IN;
+                    } else {
                         self.i = start;
                         return null;
                     }

@@ -62,8 +62,9 @@ pub const CaseClause = struct {
     // @TODO(Renzix): Implement
 };
 pub const IfClause = struct {
-    check: CompoundList,
-    body: CompoundList,
+    checks: std.ArrayList(CompoundList),
+    bodies: std.ArrayList(CompoundList),
+    else_: ?CompoundList,
 };
 pub const WhileClause = struct {
     check: CompoundList,

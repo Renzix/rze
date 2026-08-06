@@ -142,17 +142,36 @@ pub const Compiler = struct{
     pub fn compileCompoundCommand(self: *Compiler, cc: ast.CompoundCommand) void {
         switch (cc) {
             .if_clause => |if_| {
-                // run check block
-                self.compileCompoundList(if_.check);
-                // reserve the if jmp for later
-                const ifjmp = self.reserve();
-                const ifreg = self.reg;
-                self.reg += 1;
-                // create the body bytecode
-                self.compileCompoundList(if_.body);
-                // replace the if jmp with the proper values
-                self.emitReplace(ifjmp, inst.iAsBx(.jnz, ifreg, @intCast(self.bytecode.items.len - ifjmp - 1)));
-                self.reg -= 1;
+                // if and elif are all part of a big array so we loop through them here check[0] is
+                // if and check[1..] are elif's, else is single a nullable compound list. At the top
+                // of each if/elif we run the check then jmp if the check failed. We also add a jmp
+                // to the end of the if/elif/else statement at the end of every body so we dont
+                // fallthrough to the next elif
+                var bodyends: std.ArrayList(usize) = .empty;
+                for (if_.checks.items, if_.bodies.items) |check, body| {
+                    // run check block
+                    self.compileCompoundList(check);
+                    // reserve the if jmp for later
+                    const ifjmp = self.reserve();
+                    const ifreg = self.reg;
+                    // emit the body bytecode
+                    self.compileCompoundList(body);
+                    // after body always jump to the end
+                    bodyends.append(self.allocator, self.reserve()) catch @panic("oom");
+                    // replace the if jmp with the proper values
+                    self.emitReplace(ifjmp, inst.iAsBx(.jnz, ifreg,
+                                                       @intCast(self.bytecode.items.len - ifjmp - 1)));
+                }
+                // deal with optional else branch
+                if (if_.else_) |els| {
+                    self.compileCompoundList(els);
+                }
+                // fill in the jmps to end, at the end of every body
+                for (bodyends.items) |end| {
+                    self.emitReplace(end, inst.iAsBx(.jmp, undefined,
+                                                     @intCast(self.bytecode.items.len - end - 1)));
+                }
+
             },
             .brace_group => @panic("brace group not supported"),
             .while_clause => @panic("while clause not supported"),
