@@ -70,11 +70,6 @@ pub fn printf(vm: *rzvm, argv: []const []const u8) u8 {
                     '%' => {
                         writer.print("%", .{}) catch return 1;
                     },
-                    '#' => {
-                        // lot of this is not specified
-                        writer.print("unimplemented\n", .{}) catch return 3;
-                        unreachable;
-                    },
                     else => return fail(writer, "printf: %: invalid ch", 3),
                 }
             },
