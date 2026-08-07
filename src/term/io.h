@@ -30,6 +30,12 @@ cmd_fn keymap_lookup(char* seq, size_t seqlen);
 input_sm read_more_input(input_sm sm, char* arr, size_t index);
 cmdret_t ln_self_insert(line_t *l, char ch);
 
+struct grid {
+  int row;
+  int column;
+};
+struct grid rzterm_grid();
+
 cmdret_t ln_backward_delete(line_t *l);
 cmdret_t ln_accept(line_t *l);
 cmdret_t ln_beginning(line_t *l);

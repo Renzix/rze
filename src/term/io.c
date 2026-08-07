@@ -5,6 +5,7 @@
 #include <errno.h>
 #include <string.h>
 #include <stdint.h>
+#include <stdlib.h> // atoi
 #include <assert.h>
 
 struct term{
@@ -93,6 +94,53 @@ int rzterm_getline(char* arr, size_t arrsize) {
   write(STDOUT_FILENO, "\r\n", 2);
   tcsetattr(STDIN_FILENO, TCSADRAIN, &t.orig);
   return l.n;
+}
+
+struct grid rzterm_grid() {
+  struct grid ret = { -1, -1 };
+  if (!isatty(STDIN_FILENO) || !isatty(STDOUT_FILENO))
+    return ret;
+  write(STDOUT_FILENO, "\x1b[6n", 4);
+  // set 100ms timeout
+  struct termios tmp = t.raw;
+  tmp.c_cc[VMIN]  = 0;
+  tmp.c_cc[VTIME] = 1;
+
+  tcsetattr(STDIN_FILENO, TCSANOW, &tmp);
+
+  char buf[128] = {0};
+  size_t i = 2;
+  ssize_t r = read(STDIN_FILENO, &buf[0], i);
+  if (buf[0] != '\e' || buf[1] != '[') goto PARSE; // got back somethign that idk what it is
+  if (r <= 0) goto TIMEOUT;
+  for (; i < 127; i++) {
+    ssize_t r = read(STDIN_FILENO, &buf[i], 1);
+    if (buf[i]==';') break; // GOOD we got our data now continue!
+    if (r <= 0) goto TIMEOUT;
+    if (!(buf[i] >= '0' && buf[i] <= '9')) goto PARSE; // if its not a number
+  }
+  ret.row = atoi(&buf[2]);
+  const size_t row_i = i+1; // i is currently at ; and i+1 is the start of the next number
+  if (row_i >= 127) goto PARSE;
+
+  for (; i < 127; i++) {
+    ssize_t r = read(STDIN_FILENO, &buf[i], 1);
+    if (buf[i]=='R') break; // GOOD we got our data now continue!
+    if (r <= 0) goto TIMEOUT;
+    if (!(buf[i] >= '0' && buf[i] <= '9')) goto PARSE; // if its not a number
+  }
+  ret.column = atoi(&buf[row_i]);
+
+  tcsetattr(STDIN_FILENO, TCSANOW, &t.raw);
+  return ret;
+ TIMEOUT:
+  tcsetattr(STDIN_FILENO, TCSANOW, &t.raw);
+  ret.row = -1; ret.row = -1;
+  return ret;
+ PARSE:
+  tcsetattr(STDIN_FILENO, TCSANOW, &t.raw);
+  ret.row = -2; ret.row = -2;
+  return ret;
 }
 
 void rzterm_refresh(line_t *l) {
