@@ -1,6 +1,8 @@
 const std = @import("std");
 const Quoted = @import("token.zig").Quoted;
 
+// @TODO(Renzix): change structs into a giant array with indicies?
+
 pub const Program = struct {
     andors: std.ArrayList(AndOr),
     background: std.ArrayList(bool),

@@ -2,6 +2,9 @@ const std = @import("std");
 
 const rze = @import("rze");
 // const repl = @import("repl.zig");
+pub const std_options: std.Options = .{
+    .log_level = .info,
+};
 
 pub fn main(init: std.process.Init) !u8 {
     // // const arena: std.mem.Allocator = init.arena.allocator();
