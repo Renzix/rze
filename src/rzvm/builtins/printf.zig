@@ -6,6 +6,7 @@ const std = @import("std");
 // return 3 = % parse error
 // return 4 = \ expected character
 
+// printf itself https://pubs.opengroup.org/onlinepubs/9699919799/utilities/printf.html
 pub fn printf(vm: *rzvm, argv: []const []const u8) u8 {
     var outbuf: [1024]u8 = undefined;
     const fileno: std.Io.File = .stdout(); // @TODO(Renzix): handle pipe
@@ -13,14 +14,12 @@ pub fn printf(vm: *rzvm, argv: []const []const u8) u8 {
     const writer = &file.interface;
     var index: usize = 0;
     const format = argv[1];
-    var currarg: usize = 2; // used for %s
+    var currarg: usize = 2; // for %
     while (index<format.len) {
         switch (format[index]) {
-            '%' => {
+            '%' => { // % --- https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap05.html#tag_05
                 index+=1;
                 if (index>=format.len) return fail(writer, "printf: %: invalid ch", 3);
-                // @TODO(Renzix): Finish https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap05.html#tag_05
-                // need modifiers
                 // These need to be in this specific order
                 // flags below (any flag can be in any order and multiple of them)
                 // @TODO(Renzix): 0 modifier (padding)
@@ -48,19 +47,16 @@ pub fn printf(vm: *rzvm, argv: []const []const u8) u8 {
                         currarg+=1;
                     },
                     'd', 'i' => {
-                        // parse int
                         const int = std.fmt.parseInt(i64, argv[currarg], 10) catch fail(writer, "printf: %: failed to parse int", 3);
                         writer.print("{}", .{int}) catch return 1;
                         currarg+=1;
                     },
                     'x' => {
-                        // parse int
                         const int = parseuint(argv[currarg]) catch fail(writer, "printf: %: failed to parse int", 3);
                         writer.print("{x}", .{int}) catch return 1;
                         currarg+=1;
                     },
                     'X' => {
-                        // parse int
                         const int = parseuint(argv[currarg]) catch fail(writer, "printf: %: failed to parse int", 3);
                         writer.print("{X}", .{int}) catch return 1;
                         currarg+=1;
