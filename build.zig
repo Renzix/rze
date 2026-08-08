@@ -5,20 +5,20 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     // @TODO(Renzix): make src/rzvm/root.zig and src/rzx/root.zig and src/rzl/root.zig
-    const mod = b.addModule("rze", .{
+    const mod = b.addModule("rz", .{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
     });
 
     const exe = b.addExecutable(.{
-        .name = "rze",
+        .name = "rz",
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/main.zig"),
             .target = target,
             .link_libc = true,
             .optimize = optimize,
             .imports = &.{
-                .{ .name = "rze", .module = mod },
+                .{ .name = "rz", .module = mod },
             },
         }),
     });

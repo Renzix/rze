@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const rze = @import("rze");
+const rz = @import("rz");
 // const repl = @import("repl.zig");
 pub const std_options: std.Options = .{
     .log_level = .info,
@@ -21,10 +21,10 @@ pub fn main(proc: std.process.Init) !u8 {
 
 
     if (interactive) {
-        var repl = rze.repl.init(proc);
+        var repl = rz.repl.init(proc);
         return repl.run();
     } else {
-        var script = rze.script.init(proc);
+        var script = rz.script.init(proc);
         return script.run(null);
     }
 }
