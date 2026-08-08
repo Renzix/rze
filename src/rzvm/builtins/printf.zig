@@ -9,23 +9,6 @@ const std = @import("std");
 // i probably could have just passed this to c stdlib printf but i thought i might as well
 // try to see how it works
 
-// These need to be in this specific order
-// flags below (any flag can be in any order and multiple of them)
-// @TODO(Renzix): 0 modifier (padding)
-// @TODO(Renzix): # modifier (extra functionality)
-// @TODO(Renzix): + modifier (always include sign)
-// @TODO(Renzix): ' ' modifier (prefixes with space)
-// @TODO(Renzix): - modifier (left justified)
-//
-// @TODO(Renzix): Field width
-// @TODO(Renzix): Precision
-//
-// These are the conversion type TODOs
-// @TODO(Renzix): %o
-// @TODO(Renzix): %a/%A
-// @TODO(Renzix): %f/%F
-// @TODO(Renzix): %e/%E
-// @TODO(Renzix): %g/%G
 
 // so that i can use a enum with the ascii chars for nicety
 const SubConversion = enum(u8) {
@@ -70,8 +53,8 @@ const Subsitution = struct {
     precision: ?u32  = null, // amount of bytes depends on type
     conv: SubConversion,     // type to convert to
     chars_parsed: u32 = 0,
-    write_buf: [256]u8 = undefined,
-    write_len: u8 = 0,
+    write_buf: [4096]u8 = undefined,
+    write_len: u16 = 0,
 
     pub fn parse(self: *Subsitution, arr: []const u8, index: u32) !void {
         std.debug.assert(arr[index] == '%');
@@ -92,7 +75,7 @@ const Subsitution = struct {
             }
         }
         // field width
-        self.write_buf = .{0}**256;
+        self.write_buf = .{0}**4096;
         self.write_len=0;
         while (true) {
             switch(ch) {
@@ -104,13 +87,14 @@ const Subsitution = struct {
             }
             ch = try getChar(arr, &i);
         }
+        // @TODO(Renzix): parse
         if (self.write_len>0)
             self.field_width = std.fmt.parseInt(u32, self.write_buf[0..self.write_len], 10) catch return SubErr.InvalidConversion;
 
         // self.field_width = std.enums.fromInt(SubConversion, fwarr) orelse return error.InvalidConversion;
 
         // precision
-        self.write_buf = .{0}**256;
+        self.write_buf = .{0}**4096;
         self.write_len=0;
         if (arr[i]=='.') {
             _  = try getChar(arr, &i); // eat the .
@@ -125,30 +109,23 @@ const Subsitution = struct {
                 }
                 ch = try getChar(arr, &i);
             }
+            // @TODO(Renzix): parse
+            if (self.write_len>0)
+                self.precision = std.fmt.parseInt(u32, self.write_buf[0..self.write_len], 10) catch return SubErr.InvalidConversion
+            else
+                self.precision = 0;
         }
-        if (self.write_len>0)
-            self.precision = std.fmt.parseInt(u32, self.write_buf[0..self.write_len], 10) catch return SubErr.InvalidConversion;
 
         // conversion
+        // @TODO(Renzix): parse
         self.conv = std.enums.fromInt(SubConversion, arr[i]) orelse return SubErr.InvalidConversion;
-    }
-
-    fn genBuf(self: *Subsitution, arg: ?[]const u8) void {
-        self.field_width = @max(self.field_width, if(arg)|a| @as(u32, @intCast(a.len)) else 0);
-        const convAllowsLeadingZero = switch (self.conv) {
-            .a, .A, .e, .f, .F, .g, .G => true,
-            .d, .i , .o, .u, .x, .X => self.precision==null, // if percision is enabled disable this
-            else => false,
-        };
-        // @TODO(Renzix): add edge case where we do NOT allow leading zeros if .f and Inf or NaN somehow
-        if (self.flags.zero and !self.flags.left and convAllowsLeadingZero)
-            @memset(self.write_buf[0..self.field_width], '0')
-        else
-            @memset(self.write_buf[0..self.field_width], ' ');
     }
 
     // afaik only flags left and field width matter here
     fn writeBufString(self: *Subsitution, str: []const u8) void {
+        self.field_width = @max(self.field_width, @as(u32, @intCast(str.len)));
+
+        @memset(self.write_buf[0..self.field_width], ' ');
         if (self.flags.left) {
             @memcpy(self.write_buf[0..str.len],str);
         } else {
@@ -158,61 +135,143 @@ const Subsitution = struct {
 
     // afaik only flags left and field width matter here
     fn writeBufChar(self: *Subsitution, ch: u8) void {
+        self.field_width = @max(self.field_width, @as(u32, @intCast(1)));
+
+        @memset(self.write_buf[0..self.field_width], ' ');
         if (self.flags.left) {
             self.write_buf[0]=ch;
         } else {
-            self.write_buf[self.field_width]=ch;
+            self.write_buf[self.field_width-1]=ch;
         }
     }
 
-    pub fn write(self: *Subsitution, writer: *std.Io.Writer, arg: ?[]const u8) SubErr!bool {
-        self.genBuf(arg);
+    fn writeBufInt(self: *Subsitution, intstr: []const u8, signed: Sign) void {
+        const sign: ?u8 = blk: {
+            switch(signed) {
+                .NEGITIVE => break :blk '-',
+                .POSITIVE => break :blk '+',
+                .NO_SIGN => {
+                    if (self.flags.sign) {
+                        break :blk '+';
+                    } else if (self.flags.space) {
+                        break :blk ' ';
+                    } else {
+                        break :blk null;
+                    }
+                },
+            }
+        };
+
+        const signlen: u8 = if(sign!=null) 1 else 0;
+        const numlen = intstr.len+signlen;
+        self.field_width = @max(self.field_width, @as(u32, @intCast(numlen)));
+        const start: usize = if (self.flags.left) 0 else self.field_width-numlen;
+        const end: usize = if (self.flags.left) numlen else self.field_width;
+
+        if (self.flags.zero and !self.flags.left and self.precision==null) {
+            @memset(self.write_buf[0..self.field_width], '0');
+            if (sign) |s| self.write_buf[0] = s;
+        } else {
+            @memset(self.write_buf[0..self.field_width], ' ');
+            if (sign) |s| self.write_buf[start] = s;
+        }
+
+        @memcpy(self.write_buf[start+signlen..end],intstr);
+    }
+
+    // probably not needed???
+    fn parseInt(intstr: []const u8) ?i64 {
+        const int = std.fmt.parseInt(i64, intstr, 10) catch null; // @TODO(Renzix): Fix for " 123"
+        return int;
+    }
+
+    const Sign = enum(u8) {
+        NO_SIGN,
+        POSITIVE,
+        NEGITIVE,
+    };
+    fn isIntSigned(intstr: []const u8) Sign {
+        for(intstr) |ch| {
+            switch (ch) {
+                ' ' => continue,
+                '+' => return Sign.POSITIVE,
+                '-' => return Sign.NEGITIVE,
+                else => return Sign.NO_SIGN,
+            }
+        } else return Sign.NO_SIGN;
+    }
+
+    // These need to be in this specific order
+    // flags below (any flag can be in any order and multiple of them)
+    // @TODO(Renzix): 0 modifier (padding)
+    // @TODO(Renzix): # modifier (extra functionality)
+    // @TODO(Renzix): + modifier (always include sign)
+    // @TODO(Renzix): ' ' modifier (prefixes with space)
+    // @TODO(Renzix): - modifier (left justified)
+    //
+    // @TODO(Renzix): Field width
+    // @TODO(Renzix): Precision
+    //
+    // These are the conversion type TODOs
+    // @TODO(Renzix): %o
+    // @TODO(Renzix): %a/%A
+    // @TODO(Renzix): %f/%F
+    // @TODO(Renzix): %e/%E
+    // @TODO(Renzix): %g/%G
+    pub fn write(self: *Subsitution, writer: *std.Io.Writer, _: *std.Io.Writer, arg: ?[]const u8) SubErr!bool {
+        const s = if (arg) |a|
+            std.mem.trimStart(u8, a, " \t\n\x0b\x0c\r")
+        else
+            "0";
         switch (self.conv) {
             .s => {
-                if (arg) |a|
-                    self.writeBufString(a);
+                    self.writeBufString(s);
             },
             .c => {
-                if (arg) |a|
-                    writer.print("{c}", .{a[0]}) catch return error.OutOfMemory;
+                    self.writeBufChar(s[0]);
             },
             .d, .i => {
-                if (arg) |a| {
-                    const int = std.fmt.parseInt(i64, a, 10) catch return SubErr.ParseInt;
-                    writer.print("{}", .{int}) catch return SubErr.OutOfMemory;
+                const int = parseInt(s); // probaby can make "isInt" instead?
+                if (int) |_| {
+                    const signed: Sign = isIntSigned(s);
+                    switch (signed) {
+                        .NEGITIVE, .POSITIVE => |sign| self.writeBufInt(s[1..], sign),
+                        .NO_SIGN => |sign| self.writeBufInt(s[0..], sign),
+                    }
                 } else {
-                    writer.print("0", .{}) catch return SubErr.OutOfMemory;
+                    // write error buf
+                    self.writeBufInt("0", .NO_SIGN);
                 }
             },
-            .x => {
-                if (arg) |a| {
-                    const int = parseuint(a) catch return SubErr.ParseInt;
-                    writer.print("{x}", .{int}) catch return SubErr.OutOfMemory;
-                } else {
-                    writer.print("0", .{}) catch return SubErr.OutOfMemory;
-                }
-            },
-            .X => {
-                if (arg) |a| {
-                    const int = parseuint(a) catch return SubErr.ParseInt;
-                    writer.print("{X}", .{int}) catch return SubErr.OutOfMemory;
-                } else {
-                    writer.print("0", .{}) catch return SubErr.OutOfMemory;
-                }
-            },
-            .u => {
-                if (arg) |a| {
-                    // -1 is supposed to give 18446744073709551615 :)
-                    const uint: u64 = parseuint(a) catch return SubErr.ParseUInt;
-                    writer.print("{}", .{uint}) catch return SubErr.OutOfMemory;
-                } else {
-                    writer.print("0", .{}) catch return SubErr.OutOfMemory;
-                }
-            },
-            .percent => {
-                writer.print("%", .{}) catch return SubErr.OutOfMemory;
-                return false;
-            },
+            // .x => {
+            //     if (arg) |a| {
+            //         const int = parseuint(a) catch return SubErr.ParseInt;
+            //         writer.print("{x}", .{int}) catch return SubErr.OutOfMemory;
+            //     } else {
+            //         writer.print("0", .{}) catch return SubErr.OutOfMemory;
+            //     }
+            // },
+            // .X => {
+            //     if (arg) |a| {
+            //         const int = parseuint(a) catch return SubErr.ParseInt;
+            //         writer.print("{X}", .{int}) catch return SubErr.OutOfMemory;
+            //     } else {
+            //         writer.print("0", .{}) catch return SubErr.OutOfMemory;
+            //     }
+            // },
+            // .u => {
+            //     if (arg) |a| {
+            //         // -1 is supposed to give 18446744073709551615 :)
+            //         const uint: u64 = parseuint(a) catch return SubErr.ParseUInt;
+            //         writer.print("{}", .{uint}) catch return SubErr.OutOfMemory;
+            //     } else {
+            //         writer.print("0", .{}) catch return SubErr.OutOfMemory;
+            //     }
+            // },
+            // .percent => {
+            //     writer.print("%", .{}) catch return SubErr.OutOfMemory;
+            //     return false;
+            // },
             else => unreachable,
         }
         writer.writeAll(self.write_buf[0..self.field_width]) catch return SubErr.OutOfMemory;
@@ -257,9 +316,9 @@ pub fn printf(vm: *rzvm, argv: []const []const u8) u8 {
                     break;
                 };
                 if (currarg>=argv.len) {
-                    _ = sub.write(writer, null) catch fail(errwriter, "printf: %: could not write % value");
+                    _ = sub.write(writer, errwriter, null) catch fail(errwriter, "printf: %: could not write % value");
                 } else {
-                    const used_arg = sub.write(writer, argv[currarg]) catch blk: {
+                    const used_arg = sub.write(writer, errwriter, argv[currarg]) catch blk: {
                         fail(errwriter, "printf: %: could not write % value");
                         break :blk true;
                     };
