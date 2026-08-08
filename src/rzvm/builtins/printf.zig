@@ -181,7 +181,9 @@ const Subsitution = struct {
 
     // probably not needed???
     fn parseInt(intstr: []const u8) ?i64 {
-        const int = std.fmt.parseInt(i64, intstr, 10) catch null; // @TODO(Renzix): Fix for " 123"
+        // @TODO(Renzix): need to parse 0x10 as hex (ie 16 decimal), 0b10 as octal (8 decimal)
+        // @TODO(Renzix): need better error handling for stuff like "42 " and " 42  " and "  42"
+        const int = std.fmt.parseInt(i64, intstr, 10) catch null;
         return int;
     }
 
