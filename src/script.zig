@@ -1,19 +1,12 @@
 const std = @import("std");
 const print = @import("std").debug.print;
 
-// const l = @import("rzl/lexer.zig");
-// const p = @import("rzl/parser.zig");
-// const c = @import("rzl/compiler.zig");
 const p = @import("rzx/parser.zig");
 const c = @import("rzx/compiler.zig");
 const v = @import("rzvm/vm.zig");
 const Runtime  = @import("rzvm/runtime.zig").Runtime;
-const term = @cImport({
-    @cInclude("io.h");
-});
 
-// In src/repl.zig
-pub const repl = struct {
+pub const Script = struct {
     code: [10240]u8,
     code_len: usize,
     proc: std.process.Init,
@@ -22,10 +15,10 @@ pub const repl = struct {
     compiler: c.Compiler,
     vm: v.rzvm,
 
-    pub fn init(proc: std.process.Init) repl {
+    pub fn init(proc: std.process.Init) Script {
         var debug_alloc: std.heap.DebugAllocator(.{}) =.init;
 
-        var self = repl{
+        var self = Script{
             .code = std.mem.zeroes([10240]u8),
             .code_len = 0,
             .proc = proc,
@@ -35,36 +28,33 @@ pub const repl = struct {
             .compiler = undefined,
             .vm = undefined,
         };
-        const prompt = "rze> ";
-        term.rzterm_init(prompt.ptr, prompt.len);
+
         var runtime = Runtime.init(self.allocator);
         runtime.setEnv(proc.environ_map);
         self.parser = p.Parser.init(self.allocator);
         self.compiler = c.Compiler.init(self.allocator, &runtime);
         self.vm = v.rzvm.init(self.allocator, self.proc.io, &runtime);
+
         return self;
     }
-    pub fn run(self: *repl) u8 {
-        while (self.vm.halt==null) {
-            self.read() catch break; // @TODO(Renzix): Make better
-            self.eval();
-        }
-        return self.vm.halt orelse 0;
-    }
 
-    pub fn read(self: *repl) !void {
-        const n = term.rzterm_getline(&self.code, self.code.len);
-        if (n < 0) return error.eof;
-        self.code_len = @intCast(n);
-    }
-
-    pub fn eval(self: *repl) void {
-        if (self.code_len == 0) return;
-        const prog = self.code[0..self.code_len];
-        if (prog.len > 0 and prog[0] == ':') {
-            self.replcommand(prog[1..]);
-            return;
-        }
+    pub fn run(self: *Script, file: ?[]const u8) u8 {
+        // read file
+        const fileno = blk: {
+            if (file) |f| {
+                break :blk std.Io.Dir.cwd().openFile(self.proc.io, f, .{}) catch { return 127; };
+            } else {
+                break :blk std.Io.File.stdin();
+            }
+        };
+        var buf: [4096]u8 = undefined;
+        var stream = fileno.readerStreaming(self.proc.io, &buf);
+        const prog = stream.interface.allocRemaining(self.allocator, .limited(1 << 20)) catch |err| {
+            print("Error opening file {any}", .{err});
+            return 1;
+        };
+        // defer self.proc.gpa.free(val);
+        // self.code_len = self.reader.readSliceAll(self.code[0..]) catch 0;
 
         const ast = self.parser.run(prog) catch |err| {
             // @TODO(Renzix): Move all this terminal stuff to a seperate file and probably write a
@@ -94,7 +84,7 @@ pub const repl = struct {
                 else => {},
             }
             print("-------------------------------\n\x1b[0m", .{});
-            return;
+            return 1;
         };
 
         const bytecode = self.compiler.run(ast.?);
@@ -103,31 +93,8 @@ pub const repl = struct {
             self.vm.dump(0, 12);
             @panic("AAAAAHHHH");
         };
-    }
 
-    fn replcommand(self: *repl, line: []const u8) void {
-        var it = std.mem.tokenizeAny(u8, line, " \t\r\n");
-        const name = it.next() orelse return;
-
-        if (std.mem.eql(u8, name, "regs")) {
-            const start = nextint(&it, 0);
-            const end = nextint(&it, 12);
-            self.vm.dump(start, end);
-        } else if (std.mem.eql(u8, name, "r")) {
-            const r = nextint(&it, 0);
-            self.vm.regprint(@intCast(r));
-        } else if (std.mem.eql(u8, name, "constants")) {
-            self.vm.runtime.printConstants();
-        } else if (std.mem.eql(u8, name, "c")) {
-            const constant = nextint(&it, 0);
-            self.vm.runtime.printConstant(@intCast(constant));
-        } else {
-            print("unknown command: {s}\n", .{name});
-        }
-    }
-
-    fn nextint(it: *std.mem.TokenIterator(u8, .any), default: usize) usize {
-        const tok = it.next() orelse return default;
-        return std.fmt.parseInt(usize, tok, 10) catch default;
+        // print("{s}\n", .{prog});
+        return 0;
     }
 };
