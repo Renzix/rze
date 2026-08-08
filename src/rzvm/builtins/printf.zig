@@ -9,6 +9,24 @@ const std = @import("std");
 // i probably could have just passed this to c stdlib printf but i thought i might as well
 // try to see how it works
 
+// These need to be in this specific order
+// flags below (any flag can be in any order and multiple of them)
+// @TODO(Renzix): 0 modifier (padding)
+// @TODO(Renzix): # modifier (extra functionality)
+// @TODO(Renzix): + modifier (always include sign)
+// @TODO(Renzix): ' ' modifier (prefixes with space)
+// @TODO(Renzix): - modifier (left justified)
+//
+// @TODO(Renzix): Field width
+// @TODO(Renzix): Precision
+//
+// These are the conversion type TODOs
+// @TODO(Renzix): %o
+// @TODO(Renzix): %a/%A
+// @TODO(Renzix): %f/%F
+// @TODO(Renzix): %e/%E
+// @TODO(Renzix): %g/%G
+
 // so that i can use a enum with the ascii chars for nicety
 const SubConversion = enum(u8) {
     d = 'd',
@@ -37,6 +55,12 @@ const SubFlags = packed struct(u8) {
     space: bool= false,  // ' ' modifier (prepends a space, may be invalid)
     left: bool = false,  // - modifier left justified
     _: u3 = 0,           // reserved
+};
+
+const SubErr = error{
+    OutOfMemory,
+    ParseInt,
+    ParseUInt,
 };
 
 const Subsitution = struct {
@@ -87,33 +111,51 @@ const Subsitution = struct {
         return i-index;
     }
 
-    pub fn write(self: *Subsitution, writer: *std.Io.Writer, arg: []const u8) !bool {
+    pub fn write(self: *Subsitution, writer: *std.Io.Writer, arg: ?[]const u8) SubErr!bool {
         switch (self.conv) {
             .s => {
-                writer.print("{s}", .{arg}) catch return error.oom;
+                if (arg) |a|
+                    writer.print("{s}", .{a}) catch return error.OutOfMemory;
             },
             .c => {
-                writer.print("{c}", .{arg[0]}) catch return error.oom;
+                if (arg) |a|
+                    writer.print("{c}", .{a[0]}) catch return error.OutOfMemory;
             },
             .d, .i => {
-                const int = std.fmt.parseInt(i64, arg, 10) catch fail(writer, "printf: %: failed to parse int", 3);
-                writer.print("{}", .{int}) catch return error.oom;
+                if (arg) |a| {
+                    const int = std.fmt.parseInt(i64, a, 10) catch return SubErr.ParseInt; //fail(writer, "printf: %: failed to parse int", 3);
+                    writer.print("{}", .{int}) catch return SubErr.OutOfMemory;
+                } else {
+                    writer.print("0", .{}) catch return SubErr.OutOfMemory;
+                }
             },
             .x => {
-                const int = parseuint(arg) catch fail(writer, "printf: %: failed to parse int", 3);
-                writer.print("{x}", .{int}) catch return error.oom;
+                if (arg) |a| {
+                    const int = parseuint(a) catch return SubErr.ParseInt; //fail(writer, "printf: %: failed to parse int", 3);
+                    writer.print("{x}", .{int}) catch return SubErr.OutOfMemory;
+                } else {
+                    writer.print("0", .{}) catch return SubErr.OutOfMemory;
+                }
             },
             .X => {
-                const int = parseuint(arg) catch fail(writer, "printf: %: failed to parse int", 3);
-                writer.print("{X}", .{int}) catch return error.oom;
+                if (arg) |a| {
+                    const int = parseuint(a) catch return SubErr.ParseInt; //fail(writer, "printf: %: failed to parse int", 3);
+                    writer.print("{X}", .{int}) catch return SubErr.OutOfMemory;
+                } else {
+                    writer.print("0", .{}) catch return SubErr.OutOfMemory;
+                }
             },
             .u => {
+                if (arg) |a| {
                 // -1 is supposed to give 18446744073709551615 :)
-                const uint: u64 = parseuint(arg) catch fail(writer, "printf: %: failed to parse uint (too long)", 3);
-                writer.print("{}", .{uint}) catch return error.oom;
+                    const uint: u64 = parseuint(a) catch return SubErr.ParseUInt;//fail(writer, "printf: %: failed to parse uint (too long)", 3);
+                    writer.print("{}", .{uint}) catch return error.OutOfMemory;
+                } else {
+                    writer.print("0", .{}) catch return error.OutOfMemory;
+                }
             },
             .percent => {
-                writer.print("%", .{}) catch return error.oom;
+                writer.print("%", .{}) catch return error.OutOfMemory;
                 return false;
             },
             else => unreachable,
@@ -139,45 +181,32 @@ const Subsitution = struct {
 // printf itself https://pubs.opengroup.org/onlinepubs/9699919799/utilities/printf.html
 pub fn printf(vm: *rzvm, argv: []const []const u8) u8 {
     var outbuf: [1024]u8 = undefined;
+    var errbuf: [1024]u8 = undefined;
     const fileno: std.Io.File = .stdout(); // @TODO(Renzix): handle pipe
+    const errno: std.Io.File = .stderr(); // @TODO(Renzix): handle pipe
     var file: std.Io.File.Writer = .init(fileno, vm.io, &outbuf);
     const writer = &file.interface;
+    var errfile: std.Io.File.Writer = .init(errno, vm.io, &errbuf);
+    const errwriter = &errfile.interface;
     var index: u32 = 0;
     const format = argv[1];
     var currarg: usize = 2; // for %
     while (index<format.len) {
         switch (format[index]) {
             '%' => { // % --- https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap05.html#tag_05
-                // These need to be in this specific order
-                // flags below (any flag can be in any order and multiple of them)
-                // @TODO(Renzix): 0 modifier (padding)
-                // @TODO(Renzix): # modifier (extra functionality)
-                // @TODO(Renzix): + modifier (always include sign)
-                // @TODO(Renzix): ' ' modifier (prefixes with space)
-                // @TODO(Renzix): - modifier (left justified)
-                //
-                // @TODO(Renzix): Field width
-                // @TODO(Renzix): Precision
-                //
-                // These are the conversion type TODOs
-                // @TODO(Renzix): %o
-                // @TODO(Renzix): %a/%A
-                // @TODO(Renzix): %f/%F
-                // @TODO(Renzix): %e/%E
-                // @TODO(Renzix): %g/%G
                 var sub: Subsitution = .{ .conv = .s };
-                const chars_parsed = sub.parse(format, index) catch return fail(writer, "printf: %: could not parse %", 3);
-                if (currarg>=argv.len) return fail(writer, "printf: %: not enough arguments", 3);
-                const used_arg = sub.write(writer, argv[currarg]) catch return fail(writer, "printf: %: could not write % value", 3);
-                if (used_arg) currarg += 1;
+                const chars_parsed = sub.parse(format, index) catch return fail(errwriter, "printf: %: could not parse %", 3);
+                if (currarg>=argv.len) {
+                    _ = sub.write(writer, null) catch return fail(errwriter, "printf: %: could not write % value", 3);
+                } else {
+                    const used_arg = sub.write(writer, argv[currarg]) catch return fail(errwriter, "printf: %: could not write % value", 3);
+                    if (used_arg) currarg += 1;
+                }
                 index += chars_parsed;
-                // switch(format[index]) {
-                //     else => return fail(writer, "printf: %: invalid ch", 3),
-                // }
             },
             '\\' => {
                 index+=1;
-                if (index>=format.len) return fail(writer, "printf: \\: tried to \\ when nothing is next", 4);
+                if (index>=format.len) return fail(errwriter, "printf: \\: tried to \\ when nothing is next", 4);
                 const byte: ?u8 = switch (format[index]) {
                     '\\' => '\\',
                     'a' => '\x07',
@@ -196,6 +225,7 @@ pub fn printf(vm: *rzvm, argv: []const []const u8) u8 {
         }
         index+=1;
     }
+    errwriter.flush() catch return 2;
     writer.flush() catch return 2;
     return 0;
 }

@@ -7,7 +7,7 @@ pub const std_options: std.Options = .{
 };
 
 const Flags = struct {
-    job: u8
+    job: u8, // replace with enum of commands
 };
 
 pub fn main(proc: std.process.Init) !u8 {
@@ -31,12 +31,16 @@ pub fn main(proc: std.process.Init) !u8 {
         // @TODO(Renzix): print warning or assume the next arg is the command? ?
         return 1;
     }
+
+    // parse --flags
+
     // // var display = try rze.Display.init();
     // // defer display.deinit();
     // // display.run();
     const interactive = (std.Io.File.stdin().isTty(proc.io) catch false) and
         (std.Io.File.stderr().isTty(proc.io) catch false);
 
+    // handle flags to open editor or shell or lisp interpreter or compiler
     if (interactive) {
         var repl = rz.repl.init(proc);
         return repl.run();
