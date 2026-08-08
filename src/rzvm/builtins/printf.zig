@@ -70,6 +70,8 @@ const Subsitution = struct {
     precision: ?u32  = null, // amount of bytes depends on type
     conv: SubConversion,     // type to convert to
     chars_parsed: u32 = 0,
+    write_buf: [256]u8 = undefined,
+    write_len: u8 = 0,
 
     pub fn parse(self: *Subsitution, arr: []const u8, index: u32) !void {
         std.debug.assert(arr[index] == '%');
@@ -90,52 +92,85 @@ const Subsitution = struct {
             }
         }
         // field width
-        var buf: [256]u8 = undefined;
-        var bufindex: u8 = 0;
+        self.write_buf = .{0}**256;
+        self.write_len=0;
         while (true) {
             switch(ch) {
                 '0'...'9' => {
-                    buf[bufindex] = ch;
-                    bufindex += 1;
+                    self.write_buf[self.write_len] = ch;
+                    self.write_len += 1;
                 },
                 else => break,
             }
             ch = try getChar(arr, &i);
         }
-        if (bufindex>0)
-            self.field_width = std.fmt.parseInt(u32, buf[0..bufindex], 10) catch return SubErr.InvalidConversion;
+        if (self.write_len>0)
+            self.field_width = std.fmt.parseInt(u32, self.write_buf[0..self.write_len], 10) catch return SubErr.InvalidConversion;
 
         // self.field_width = std.enums.fromInt(SubConversion, fwarr) orelse return error.InvalidConversion;
 
         // precision
-        buf = .{0}**256;
-        bufindex=0;
+        self.write_buf = .{0}**256;
+        self.write_len=0;
         if (arr[i]=='.') {
             _  = try getChar(arr, &i); // eat the .
             ch = try getChar(arr, &i); // get the new input
             while (true) {
                 switch(ch) {
                     '0'...'9' => {
-                        buf[bufindex] = ch;
-                        bufindex += 1;
+                        self.write_buf[self.write_len] = ch;
+                        self.write_len += 1;
                     },
                     else => break,
                 }
                 ch = try getChar(arr, &i);
             }
         }
-        if (bufindex>0)
-            self.precision = std.fmt.parseInt(u32, buf[0..bufindex], 10) catch return SubErr.InvalidConversion;
+        if (self.write_len>0)
+            self.precision = std.fmt.parseInt(u32, self.write_buf[0..self.write_len], 10) catch return SubErr.InvalidConversion;
 
         // conversion
         self.conv = std.enums.fromInt(SubConversion, arr[i]) orelse return SubErr.InvalidConversion;
     }
 
+    fn genBuf(self: *Subsitution, arg: ?[]const u8) void {
+        self.field_width = @max(self.field_width, if(arg)|a| @as(u32, @intCast(a.len)) else 0);
+        const convAllowsLeadingZero = switch (self.conv) {
+            .a, .A, .e, .f, .F, .g, .G => true,
+            .d, .i , .o, .u, .x, .X => self.precision==null, // if percision is enabled disable this
+            else => false,
+        };
+        // @TODO(Renzix): add edge case where we do NOT allow leading zeros if .f and Inf or NaN somehow
+        if (self.flags.zero and !self.flags.left and convAllowsLeadingZero)
+            @memset(self.write_buf[0..self.field_width], '0')
+        else
+            @memset(self.write_buf[0..self.field_width], ' ');
+    }
+
+    // afaik only flags left and field width matter here
+    fn writeBufString(self: *Subsitution, str: []const u8) void {
+        if (self.flags.left) {
+            @memcpy(self.write_buf[0..str.len],str);
+        } else {
+            @memcpy(self.write_buf[self.field_width-str.len..self.field_width],str);
+        }
+    }
+
+    // afaik only flags left and field width matter here
+    fn writeBufChar(self: *Subsitution, ch: u8) void {
+        if (self.flags.left) {
+            self.write_buf[0]=ch;
+        } else {
+            self.write_buf[self.field_width]=ch;
+        }
+    }
+
     pub fn write(self: *Subsitution, writer: *std.Io.Writer, arg: ?[]const u8) SubErr!bool {
+        self.genBuf(arg);
         switch (self.conv) {
             .s => {
                 if (arg) |a|
-                    writer.print("{s}", .{a}) catch return error.OutOfMemory;
+                    self.writeBufString(a);
             },
             .c => {
                 if (arg) |a|
@@ -180,6 +215,8 @@ const Subsitution = struct {
             },
             else => unreachable,
         }
+        writer.writeAll(self.write_buf[0..self.field_width]) catch return SubErr.OutOfMemory;
+        writer.flush() catch {};
         return true;
     }
 
