@@ -75,6 +75,7 @@ pub const Parser = struct {
     fn parseCompleteCommandList(self: *Parser) !?ast.Program {
         var program: ast.Program = .{ .andors = .empty, .background = .empty };
         while (true) {
+            _ = self.skipNewlines();
             const andor = try self.parseAndOr() orelse break;
             try program.andors.append(self.allocator, andor);
 
@@ -89,7 +90,6 @@ pub const Parser = struct {
                 },
             }
         }
-        _ = self.skipWhitespace();
         _ = self.skipNewlines();
         if (self.i < self.code.len) return self.fail(.unexpected_token, self.i); // make better
         std.debug.assert(program.andors.items.len == program.background.items.len);
@@ -111,7 +111,6 @@ pub const Parser = struct {
                 else => .end,
             } else .end;
             try andor.and_or_list.append(self.allocator, a);
-            _ = self.skipWhitespace();
             _ = self.skipNewlines();
             if (a==ast.AndOrIf.end) { self.i = start; break; }
         }
@@ -124,7 +123,7 @@ pub const Parser = struct {
         _ = self.skipWhitespace();
         if (self.lexComptimeKeyword(Keyword.BANG)) {
             pipeline.bang = true;
-            _ = self.skipWhitespace();
+            _ = self.skipNewlines();
         }
         while(true) {
             if (try self.parseCommand()) |cmd| {
@@ -132,7 +131,6 @@ pub const Parser = struct {
             }
             _ = self.skipWhitespace();
             if (self.lexComptimeControlOperator(ControlOperator.PIPE)) {
-                _ = self.skipWhitespace();
                 _ = self.skipNewlines();
                 continue;
             }
@@ -262,15 +260,13 @@ pub const Parser = struct {
         // andor which means its basically pipes and executable word stuff
         // @TODO(Renzix): Implement for compound command support
         var cl: ast.CompoundList = .{ .andors = .empty };
-        _ = self.skipWhitespace();
         while (true) {
+            _ = self.skipNewlines();
             const andor = try self.parseAndOr() orelse break;
             try cl.andors.append(self.allocator, andor);
-            _ = self.skipWhitespace(); // this should also skip newline but it doesnt
             switch (self.code[self.i]) {
                 ';', '\n', '&' =>  {
                     self.i += 1;
-                    _ = self.skipWhitespace();
                     continue;
                 },
                 else => return self.fail(ParseDiagnostics.Tag.invalid_compound_list, self.i),
@@ -278,7 +274,7 @@ pub const Parser = struct {
         }
         // parse andor
         // if seperator repeat
-        _ = self.skipWhitespace(); // newline too???
+        _ = self.skipNewlines();
 
         return cl;
     }
@@ -1049,9 +1045,11 @@ pub const Parser = struct {
     }
 
     fn skipNewlines(self: *Parser) usize {
+        const w1 = self.skipWhitespace();
         const start = self.i;
         while (self.i<self.code.len and self.code[self.i]=='\n') self.i+=1;
-        return self.i - start;
+        const w2 = self.skipWhitespace();
+        return self.i - start + w1 + w2;
     }
 
     fn fail(self: *Parser, tag: ParseDiagnostics.Tag, pos: usize) ParseErr {
