@@ -148,14 +148,21 @@ pub const Parser = struct {
     fn parseCommand(self: *Parser) !?ast.Command {
         // function command
         // compound command and optional redirect
+        const start = self.i;
+        if (try self.lexKeyword()) |kw| { // so that we dont reparse FI
+            self.i = start;
+            switch (kw) {
+                .RBRACE, .ESAC, .IN, .ELIF, .FI, .THEN, .ELSE, .DO, .DONE => return null,
+                else => {},
+            }
+        }
         if (try self.parseCompoundCommand()) |cmd| {
             return .{ .compound_command = cmd };
-        } else if (try self.parseSimpleCommand()) |cmd| {
-            return .{ .simple_command = cmd };
-        } else {
-            // return ParseErr.Unimplemented;
-            return null;
         }
+        if (try self.parseSimpleCommand()) |cmd| {
+            return .{ .simple_command = cmd };
+        }
+        return null;
     }
 
     fn parseSimpleCommand(self: *Parser) !?ast.SimpleCommand {
@@ -184,6 +191,7 @@ pub const Parser = struct {
         //     self.parseCompoundList();
         //     self.lexChar(')');
         // }
+        const start = self.i;
         const w = try self.lexKeyword() orelse return null;
         return blk: switch (w) {
             Keyword.IF => {
@@ -243,7 +251,10 @@ pub const Parser = struct {
                 if (!self.lexComptimeKeyword(Keyword.RBRACE)) @panic("Expected }");
                 break :blk .{ .brace_group = .{ .group = body }};
             },
-            else => null, // check if (
+            else => {
+                self.i = start;
+                break :blk null; // check if (
+            },
         };
     }
 
@@ -259,7 +270,8 @@ pub const Parser = struct {
             switch (self.code[self.i]) {
                 ';', '\n', '&' =>  {
                     self.i += 1;
-                    break;
+                    _ = self.skipWhitespace();
+                    continue;
                 },
                 else => return self.fail(ParseDiagnostics.Tag.invalid_compound_list, self.i),
             }
