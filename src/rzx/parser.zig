@@ -727,71 +727,72 @@ pub const Parser = struct {
     fn lexKeyword(self: *Parser) !?Keyword {
         const start = self.i;
         if (self.i < self.code.len) {
-            switch(self.code[self.i]) {
+            const kw = blk: switch(self.code[self.i]) {
                 '!' => {
                     self.i += 1;
-                    return Keyword.BANG;
+                    break :blk Keyword.BANG;
                 },
                 '{' => {
                     self.i += 1;
-                    return Keyword.LBRACE;
+                    break :blk Keyword.LBRACE;
                 },
                 '}' => {
                     self.i += 1;
-                    return Keyword.RBRACE;
+                    break :blk Keyword.RBRACE;
                 },
                 'c' => { // case
                     self.i += 1;
                     if (self.lexString("ase")) {
-                        return Keyword.CASE;
+                        break :blk Keyword.CASE;
                     } else {
                         self.i = start;
-                        return null;
+                        break :blk null;
                     }
                 },
                 'e' => { // esac, elif, else
                     self.i += 1;
                     if (self.lexChar('l')) {
                         if (self.lexString("if")) {
-                            return Keyword.ELIF;
+                            break :blk Keyword.ELIF;
                         } else if (self.lexString("se")) {
-                            return Keyword.ELSE;
+                            break :blk Keyword.ELSE;
                         }
                     } else if (self.lexString("sac")) {
-                        return Keyword.ESAC;
+                        break :blk Keyword.ESAC;
                     }
                     self.i = start;
-                    return null;
+                    break :blk null;
                 },
                 'i' => { // in, if
                     self.i += 1;
                     if (self.lexChar('f')) {
-                        return Keyword.IF;
+                        // assert space
+                        break :blk Keyword.IF;
                     } else if (self.lexChar('n')) {
-                        return Keyword.IN;
+                        break :blk Keyword.IN;
                     } else {
                         self.i = start;
-                        return null;
+                        break :blk null;
                     }
                 },
                 'f' => { // fi, for
                     self.i += 1;
                     if (self.lexChar('i')) {
-                        return Keyword.FI;
+                        break :blk Keyword.FI;
                     } else if (self.lexString("or")) {
-                        return Keyword.FOR;
+                        break :blk Keyword.FOR;
                     } else {
                         self.i = start;
-                        return null;
+                        break :blk null;
                     }
                 },
                 't' => { // then
                     self.i += 1;
                     if (self.lexString("hen")) {
-                        return Keyword.THEN;
+                        break :blk Keyword.THEN;
                     } else {
                         self.i = start;
-                        return null;
+                        break :blk null;
                     }
                 },
                 'd' => { // do, done
@@ -799,40 +800,48 @@ pub const Parser = struct {
                     if (self.lexChar('o')) {
                         if (self.lexChar('n')) {
                             if (self.lexChar('e')) {
-                                return Keyword.DONE;
+                                break :blk Keyword.DONE;
                             } else {
                                 self.i = start;
-                                return null;
+                                break :blk null;
                             }
                         } else {
-                            return Keyword.DO;
+                            break :blk Keyword.DO;
                         }
                     } else {
                         self.i = start;
-                        return null;
+                        break :blk null;
                     }
                 },
                 'u' => { // until
                     self.i += 1;
                     if (self.lexString("ntil")) {
-                        return Keyword.UNTIL;
+                        break :blk Keyword.UNTIL;
                     } else {
                         self.i = start;
-                        return null;
+                        break :blk null;
                     }
                 },
                 'w' => { // while
                     self.i += 1;
                     if (self.lexString("hile")) {
-                        return Keyword.WHILE;
+                        break :blk Keyword.WHILE;
                     } else {
                         self.i = start;
-                        return null;
+                        break :blk null;
                     }
                 },
                 else => {
-                    return null;
+                    break :blk null;
                 },
+            };
+            // if we are out of bounds then always return the keyword else make sure there is a
+            // delimiter so 'if true; then echo test; fi' is valid and `ifconfig` doesnt return kw
+            if (self.i >= self.code.len or helper.DelimChars[self.code[self.i]]) {
+                return kw;
+            } else {
+                self.i=start;
+                return null;
             }
         } else {
             return null;
