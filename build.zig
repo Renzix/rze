@@ -30,8 +30,6 @@ pub fn build(b: *std.Build) void {
     });
     mod.addIncludePath(b.path("src/term"));
 
-    exe.root_module.linkSystemLibrary("SDL3", .{});
-
     b.installArtifact(exe);
 
     const run_step = b.step("run", "Run the app");
